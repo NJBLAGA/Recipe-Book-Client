@@ -46,8 +46,14 @@ client/
 │   └── icons/                # Additional icon sizes (future)
 ├── src/
 │   ├── routes/               # TanStack Router — one file = one URL
-│   │   ├── __root.tsx        # Root layout (providers, global chrome)
-│   │   ├── index.tsx         # / — landing / auth gate
+│   │   ├── __root.tsx        # Root layout — QueryClientProvider + Toaster
+│   │   ├── _auth.tsx         # Pathless layout — unauthenticated (centered card, no nav)
+│   │   ├── _auth/
+│   │   │   ├── sign-in.tsx   # /sign-in
+│   │   │   └── sign-up.tsx   # /sign-up
+│   │   ├── _app.tsx          # Pathless layout — auth-guarded, bottom nav
+│   │   ├── _app/
+│   │   │   └── index.tsx     # / (dashboard)
 │   │   └── ...               # Built out as screens are added
 │   ├── components/
 │   │   ├── ui/               # shadcn/ui components (owned, not imported)
@@ -56,6 +62,7 @@ client/
 │   ├── lib/
 │   │   ├── utils.ts          # cn() helper (clsx + tailwind-merge)
 │   │   ├── api.ts            # Typed fetch wrapper around /api/*
+│   │   ├── query.ts          # QueryClient singleton (TanStack Query cache)
 │   │   └── auth.ts           # better-auth browser client
 │   └── index.css             # Tailwind v4 import + full design token system
 ├── components.json           # shadcn/ui CLI config (run: npx shadcn add <component>)
@@ -161,7 +168,7 @@ npx shadcn add form
 # etc.
 ```
 
-Components already added: _(none yet — added as needed)_
+Components already added: `button`, `input`, `label`, `form`, `card`, `separator`, `sonner`
 
 ---
 
