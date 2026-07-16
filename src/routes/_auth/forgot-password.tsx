@@ -65,9 +65,6 @@ function ForgotPasswordPage() {
             receive a reset link shortly. Check your spam folder if it doesn't arrive.
           </p>
         </div>
-        <Button variant="outline" className="w-full" asChild>
-          <Link to="/sign-in">Back to sign in</Link>
-        </Button>
       </div>
     );
   }

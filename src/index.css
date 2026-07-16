@@ -4,6 +4,7 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --font-sans: 'Poppins', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -23,6 +24,7 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -41,96 +43,115 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-/* ─── Catppuccin Latte (light) ────────────────────────────────────────────── */
+/* ─── Light mode ──────────────────────────────────────────────────────────── */
 :root {
   --radius: 0.625rem;
 
-  --background: oklch(0.964 0.005 271.42);       /* Base */
-  --foreground: oklch(0.369 0.056 285.18);        /* Text */
+  --background: oklch(0.97 0.004 255);
+  --foreground: oklch(0.13 0.03 255);
 
-  --card: oklch(0.939 0.008 268.13);             /* Mantle */
-  --card-foreground: oklch(0.369 0.056 285.18);   /* Text */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.13 0.03 255);
 
-  --popover: oklch(0.964 0.005 271.42);          /* Base */
-  --popover-foreground: oklch(0.369 0.056 285.18);/* Text */
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.13 0.03 255);
 
-  --primary: oklch(0.537 0.217 298.24);          /* Mauve */
-  --primary-foreground: oklch(0.964 0.005 271.42);/* Base */
 
-  --secondary: oklch(0.845 0.015 268.81);        /* Surface0 */
-  --secondary-foreground: oklch(0.369 0.056 285.18);/* Text */
+  --primary: oklch(0.50 0.21 255);
+  --primary-foreground: oklch(1 0 0);
 
-  --muted: oklch(0.788 0.018 273.62);            /* Surface1 */
-  --muted-foreground: oklch(0.493 0.039 284.11); /* Subtext0 */
+  --secondary: oklch(0.94 0.008 255);
+  --secondary-foreground: oklch(0.28 0.04 255);
 
-  --accent: oklch(0.845 0.015 268.81);           /* Surface0 */
-  --accent-foreground: oklch(0.369 0.056 285.18);/* Text */
+  --muted: oklch(0.94 0.008 255);
+  --muted-foreground: oklch(0.50 0.02 255);
 
-  --destructive: oklch(0.53 0.197 16.47);        /* Red */
+  --accent: oklch(0.93 0.01 255);
+  --accent-foreground: oklch(0.28 0.04 255);
 
-  --border: oklch(0.788 0.018 273.62);           /* Surface1 */
-  --input: oklch(0.845 0.015 268.81);            /* Surface0 */
-  --ring: oklch(0.537 0.217 298.24);             /* Mauve */
+  --destructive: oklch(0.53 0.197 16.47);
+  --destructive-foreground: oklch(1 0 0);
 
-  --chart-1: oklch(0.502 0.215 263.63);          /* Blue */
-  --chart-2: oklch(0.537 0.217 298.24);          /* Mauve */
-  --chart-3: oklch(0.605 0.169 148.57);          /* Green */
-  --chart-4: oklch(0.66 0.196 40.75);            /* Peach */
-  --chart-5: oklch(0.53 0.197 16.47);            /* Red */
+  --border: oklch(0.82 0.012 255);
+  --input: oklch(0.82 0.012 255);
+  --ring: oklch(0.50 0.21 255);
 
-  --sidebar: oklch(0.939 0.008 268.13);          /* Mantle */
-  --sidebar-foreground: oklch(0.369 0.056 285.18);
-  --sidebar-primary: oklch(0.537 0.217 298.24);
-  --sidebar-primary-foreground: oklch(0.964 0.005 271.42);
-  --sidebar-accent: oklch(0.845 0.015 268.81);
-  --sidebar-accent-foreground: oklch(0.369 0.056 285.18);
-  --sidebar-border: oklch(0.788 0.018 273.62);
-  --sidebar-ring: oklch(0.537 0.217 298.24);
+  --chart-1: oklch(0.50 0.21 255);
+  --chart-2: oklch(0.60 0.18 200);
+  --chart-3: oklch(0.65 0.15 160);
+  --chart-4: oklch(0.65 0.18 40);
+  --chart-5: oklch(0.53 0.197 16.47);
+
+  --sidebar: oklch(0.975 0.004 255);
+  --sidebar-foreground: oklch(0.13 0.03 255);
+  --sidebar-primary: oklch(0.50 0.21 255);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.93 0.01 255);
+  --sidebar-accent-foreground: oklch(0.28 0.04 255);
+  --sidebar-border: oklch(0.82 0.012 255);
+  --sidebar-ring: oklch(0.50 0.21 255);
 }
 
-/* ─── Catppuccin Mocha (dark) ─────────────────────────────────────────────── */
+/* ─── Dark mode — navy (one shade lighter) ────────────────────────────────── */
 .dark {
-  --background: oklch(0.179 0.015 285.39);       /* Base */
-  --foreground: oklch(0.862 0.025 273.63);        /* Text */
+  --background: oklch(0.215 0.052 255);
+  --foreground: oklch(0.88 0.02 255);
 
-  --card: oklch(0.143 0.013 285.76);             /* Mantle */
-  --card-foreground: oklch(0.862 0.025 273.63);   /* Text */
+  --card: oklch(0.185 0.048 255);
+  --card-foreground: oklch(0.88 0.02 255);
 
-  --popover: oklch(0.143 0.013 285.76);          /* Mantle */
-  --popover-foreground: oklch(0.862 0.025 273.63);/* Text */
+  --popover: oklch(0.185 0.048 255);
+  --popover-foreground: oklch(0.88 0.02 255);
 
-  --primary: oklch(0.731 0.149 301.95);          /* Mauve */
-  --primary-foreground: oklch(0.179 0.015 285.39);/* Base */
+  --primary: oklch(0.80 0.14 52);
+  --primary-foreground: oklch(0.12 0.02 52);
 
-  --secondary: oklch(0.267 0.019 284.99);        /* Surface0 */
-  --secondary-foreground: oklch(0.862 0.025 273.63);/* Text */
+  --secondary: oklch(0.265 0.046 255);
+  --secondary-foreground: oklch(0.88 0.02 255);
 
-  --muted: oklch(0.267 0.019 284.99);            /* Surface0 */
-  --muted-foreground: oklch(0.692 0.027 271.44); /* Subtext0 */
+  --muted: oklch(0.265 0.046 255);
+  --muted-foreground: oklch(0.62 0.038 255);
 
-  --accent: oklch(0.34 0.022 283.04);            /* Surface1 */
-  --accent-foreground: oklch(0.862 0.025 273.63);/* Text */
+  --accent: oklch(0.30 0.046 255);
+  --accent-foreground: oklch(0.88 0.02 255);
 
-  --destructive: oklch(0.722 0.154 2.23);        /* Red */
+  --destructive: oklch(0.72 0.154 2.23);
+  --destructive-foreground: oklch(1 0 0);
 
-  --border: oklch(0.267 0.019 284.99);           /* Surface0 */
-  --input: oklch(0.267 0.019 284.99);            /* Surface0 */
-  --ring: oklch(0.731 0.149 301.95);             /* Mauve */
+  --border: oklch(0.38 0.052 255);
+  --input: oklch(0.38 0.052 255);
+  --ring: oklch(0.80 0.14 52);
 
-  --chart-1: oklch(0.723 0.119 264.09);          /* Blue */
-  --chart-2: oklch(0.731 0.149 301.95);          /* Mauve */
-  --chart-3: oklch(0.847 0.139 148.45);          /* Green */
-  --chart-4: oklch(0.774 0.126 47.21);           /* Peach */
-  --chart-5: oklch(0.722 0.154 2.23);            /* Red */
+  --chart-1: oklch(0.80 0.14 52);
+  --chart-2: oklch(0.72 0.14 200);
+  --chart-3: oklch(0.75 0.13 160);
+  --chart-4: oklch(0.75 0.15 40);
+  --chart-5: oklch(0.72 0.154 2.23);
 
-  --sidebar: oklch(0.143 0.013 285.76);          /* Mantle */
-  --sidebar-foreground: oklch(0.862 0.025 273.63);
-  --sidebar-primary: oklch(0.731 0.149 301.95);
-  --sidebar-primary-foreground: oklch(0.179 0.015 285.39);
-  --sidebar-accent: oklch(0.267 0.019 284.99);
-  --sidebar-accent-foreground: oklch(0.862 0.025 273.63);
-  --sidebar-border: oklch(0.267 0.019 284.99);
-  --sidebar-ring: oklch(0.731 0.149 301.95);
+  --sidebar: oklch(0.185 0.048 255);
+  --sidebar-foreground: oklch(0.88 0.02 255);
+  --sidebar-primary: oklch(0.80 0.14 52);
+  --sidebar-primary-foreground: oklch(0.12 0.02 52);
+  --sidebar-accent: oklch(0.27 0.048 255);
+  --sidebar-accent-foreground: oklch(0.87 0.02 255);
+  --sidebar-border: oklch(0.38 0.052 255);
+  --sidebar-ring: oklch(0.80 0.14 52);
+}
+
+@utility scrollbar-hide {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Move Sonner close button to the right inside the toast */
+[data-sonner-toast] > [data-close-button] {
+  right: 8px !important;
+  left: auto !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  border-radius: var(--radius-sm) !important;
 }
 
 @layer base {
@@ -141,10 +162,20 @@
   html {
     -webkit-tap-highlight-color: transparent;
     -webkit-text-size-adjust: 100%;
+    font-size: 15px;
+  }
+
+  @media (min-width: 768px) {
+    html { font-size: 15.5px; }
+  }
+
+  @media (min-width: 1024px) {
+    html { font-size: 16.5px; }
   }
 
   body {
     @apply bg-background text-foreground antialiased;
+    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', Roboto, 'Helvetica Neue', Arial, sans-serif;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }

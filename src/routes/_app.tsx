@@ -1,6 +1,6 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useEffect } from 'react';
-import { BookOpenText, ShoppingCart, Refrigerator, Home, UserCircle } from 'lucide-react';
+import { BookOpenText, ShoppingCart, Refrigerator, Users, UserCircle } from 'lucide-react';
 import { authClient } from '@/lib/auth';
 import { useHousehold } from '@/hooks/useHousehold';
 import { useMe } from '@/hooks/useMe';
@@ -11,11 +11,11 @@ export const Route = createFileRoute('/_app')({
 });
 
 const navItems = [
-  { to: '/', label: 'Home', icon: Home, exact: true },
-  { to: '/recipes', label: 'Recipes', icon: BookOpenText, exact: false },
+  { to: '/recipes', label: 'My Recipes', icon: BookOpenText, exact: false },
+  { to: '/community', label: 'Community Recipes', icon: Users, exact: false },
   { to: '/profile', label: 'Profile', icon: UserCircle, exact: false },
-  { to: '/pantry', label: 'Pantry', icon: Refrigerator, exact: false },
-  { to: '/shopping-list', label: 'Shopping', icon: ShoppingCart, exact: false },
+  { to: '/pantry', label: 'My Pantry', icon: Refrigerator, exact: false },
+  { to: '/shopping-list', label: 'Shopping List', icon: ShoppingCart, exact: false },
 ];
 
 function Spinner() {
@@ -81,7 +81,7 @@ function AppLayout() {
         <Outlet />
       </main>
       <nav className="bg-background/95 border-t fixed bottom-0 left-0 right-0 z-50 supports-[backdrop-filter]:backdrop-blur-sm">
-        <div className="mx-auto flex max-w-lg items-center justify-around px-1 py-2 pb-[env(safe-area-inset-bottom)]">
+        <div className="mx-auto flex max-w-lg items-center justify-around px-0.5 py-1.5 pb-[env(safe-area-inset-bottom)] sm:px-1 sm:py-2">
           {visibleNavItems.map(({ to, label, icon: Icon, exact }) => {
             const active = exact ? pathname === to : pathname.startsWith(to);
             const showAvatar = to === '/profile' && !!me?.image;
@@ -90,7 +90,7 @@ function AppLayout() {
                 key={to}
                 to={to as '/'}
                 className={cn(
-                  'flex flex-col items-center gap-0.5 rounded-xl px-3 py-2 text-[11px] transition-colors',
+                  'flex flex-col items-center gap-0.5 rounded-xl px-0.5 py-1 text-[8px] leading-tight transition-colors min-w-0 sm:px-3 sm:py-2 sm:text-[11px]',
                   active
                     ? 'text-primary font-medium'
                     : 'text-muted-foreground hover:text-foreground',
@@ -99,7 +99,7 @@ function AppLayout() {
                 {showAvatar ? (
                   <div
                     className={cn(
-                      'h-5 w-5 overflow-hidden rounded-full',
+                      'h-4 w-4 overflow-hidden rounded-full sm:h-5 sm:w-5',
                       active
                         ? 'ring-2 ring-primary ring-offset-1 ring-offset-background'
                         : 'ring-1 ring-border',
@@ -108,9 +108,9 @@ function AppLayout() {
                     <img src={me!.image!} alt="" className="h-full w-full object-cover" />
                   </div>
                 ) : (
-                  <Icon className={cn('h-5 w-5', active && 'stroke-[2.5]')} />
+                  <Icon className={cn('h-4 w-4 sm:h-5 sm:w-5', active && 'stroke-[2.5]')} />
                 )}
-                {label}
+                <span className="text-center leading-tight max-w-[60px] sm:max-w-none">{label}</span>
               </Link>
             );
           })}

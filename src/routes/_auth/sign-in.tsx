@@ -93,9 +93,6 @@ function SignInPage() {
             come back and sign in.
           </p>
         </div>
-        <Button className="w-full" onClick={() => setShowEmailSent(false)}>
-          Sign in
-        </Button>
       </div>
     );
   }

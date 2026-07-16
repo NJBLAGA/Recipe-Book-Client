@@ -11,10 +11,10 @@ export const Route = createRootRoute({
 
 function RootLayout() {
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+    <ThemeProvider attribute="class" defaultTheme="light" disableTransitionOnChange>
       <QueryClientProvider client={queryClient}>
         <Outlet />
-        <Toaster richColors position="top-center" />
+        <Toaster position="top-center" />
         {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
       </QueryClientProvider>
     </ThemeProvider>
