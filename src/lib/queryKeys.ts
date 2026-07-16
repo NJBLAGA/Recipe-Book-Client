@@ -14,6 +14,7 @@ export const queryKeys = {
   shares: {
     received: () => ['shares', 'received'] as const,
     sent: () => ['shares', 'sent'] as const,
+    review: (shareId: string) => ['shares', shareId, 'review'] as const,
   },
   recipeBook: {
     pins: () => ['recipe-book', 'pins'] as const,

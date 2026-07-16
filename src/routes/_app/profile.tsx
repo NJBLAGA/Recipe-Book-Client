@@ -1,3 +1,4 @@
+import React from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -5,7 +6,7 @@ import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
 import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   LogOut, Trash2, Camera, Sun, Moon, CheckCircle2, XCircle,
   DoorOpen, ArrowLeftRight, Mail, Crown, Home, TriangleAlert,
@@ -134,23 +135,73 @@ function initials(name: string | null, fallback: string) {
 function StarRating({ rating }: { rating: { avg: number; count: number } | null }) {
   if (!rating || rating.count === 0)
     return <span className="text-[10px] text-muted-foreground">No Reviews</span>;
-  const rounded = Math.round(rating.avg);
+  const rounded = Math.round(rating.avg * 2) / 2;
   return (
     <div className="flex items-center gap-1">
       <div className="flex gap-0.5">
-        {[1, 2, 3, 4, 5].map((i) => (
-          <Star key={i} className={cn('h-3 w-3', i <= rounded ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/25')} />
-        ))}
+        {[1, 2, 3, 4, 5].map((i) => {
+          const state: 'full' | 'half' | 'empty' =
+            rounded >= i ? 'full' : rounded >= i - 0.5 ? 'half' : 'empty';
+          if (state === 'full') return <Star key={i} className="h-3 w-3 fill-amber-400 text-amber-400" />;
+          if (state === 'half') return (
+            <span key={i} className="relative inline-block h-3 w-3">
+              <Star className="h-3 w-3 text-muted-foreground/25" />
+              <Star className="absolute inset-0 h-3 w-3 fill-amber-400 text-amber-400 [clip-path:inset(0_50%_0_0)]" />
+            </span>
+          );
+          return <Star key={i} className="h-3 w-3 text-muted-foreground/25" />;
+        })}
       </div>
       <span className="text-[10px] text-muted-foreground">({rating.count})</span>
     </div>
   );
 }
 
+function HalfStarPicker({ value, onChange, size = 6 }: { value: number; onChange: (v: number) => void; size?: number }) {
+  const [hovered, setHovered] = useState<number | null>(null);
+  const display = hovered ?? value;
+  return (
+    <div className="flex gap-0.5" onMouseLeave={() => setHovered(null)}>
+      {[1, 2, 3, 4, 5].map((star) => {
+        const state: 'full' | 'half' | 'empty' =
+          display >= star ? 'full' : display >= star - 0.5 ? 'half' : 'empty';
+        return (
+          <div key={star} className="relative cursor-pointer" style={{ width: size * 4, height: size * 4 }}>
+            {state === 'full' && (
+              <Star className="fill-amber-400 text-amber-400" style={{ width: size * 4, height: size * 4 }} />
+            )}
+            {state === 'half' && (
+              <>
+                <Star className="text-muted-foreground/25" style={{ width: size * 4, height: size * 4 }} />
+                <Star className="absolute inset-0 fill-amber-400 text-amber-400 [clip-path:inset(0_50%_0_0)]"
+                  style={{ width: size * 4, height: size * 4 }} />
+              </>
+            )}
+            {state === 'empty' && (
+              <Star className="text-muted-foreground/25" style={{ width: size * 4, height: size * 4 }} />
+            )}
+            <button type="button"
+              className="absolute inset-y-0 left-0 w-1/2 focus:outline-none"
+              onMouseEnter={() => setHovered(star - 0.5)}
+              onClick={() => onChange(star - 0.5)}
+            />
+            <button type="button"
+              className="absolute inset-y-0 right-0 w-1/2 focus:outline-none"
+              onMouseEnter={() => setHovered(star)}
+              onClick={() => onChange(star)}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function DialogX() {
   return (
-    <AlertDialogCancel className="absolute top-3 left-3 h-7 w-7 rounded-full p-0 border-0 bg-transparent hover:bg-muted flex items-center justify-center">
+    <AlertDialogCancel className="absolute right-3 top-3 z-10 h-8 w-8 rounded-full bg-background/90 border border-border/60 shadow-md text-foreground hover:bg-muted transition-colors backdrop-blur-sm p-0 flex items-center justify-center">
       <X className="h-4 w-4" />
+      <span className="sr-only">Close</span>
     </AlertDialogCancel>
   );
 }
@@ -183,7 +234,7 @@ function ProfilePage() {
 
   return (
     <div className="flex flex-col items-center px-4 pb-24 pt-6">
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-md sm:max-w-xl lg:w-[65%] lg:max-w-none">
         <Tabs defaultValue="settings">
           <div className="rounded-t-2xl border border-b-0 overflow-hidden">
             <TabsList className="w-full h-12 rounded-none bg-card border-b p-0 gap-0">
@@ -1142,9 +1193,6 @@ function MemberProfileDialog({ member, householdName, meId, open, onClose }: {
           {!isLoading && activePins.length > 0 && (
             <div className="space-y-2">
               <p className="text-sm font-semibold">Pinned Recipes</p>
-              {!isCurrentUser && (
-                <p className="text-xs text-muted-foreground">Tap a recipe to request it from {member.name?.split(' ')[0] ?? 'them'}.</p>
-              )}
               <div className="space-y-2.5">
                 {activePins.map((pin) => (
                   <PinCard key={pin.position} pin={pin}
@@ -1360,6 +1408,127 @@ function HouseholdNotifications({ household }: {
   );
 }
 
+// ─── Share review helpers ─────────────────────────────────────────────────────
+
+interface ShareReview { id: string; rating: number; comment: string | null; }
+
+const HISTORY_PAGE = 5;
+
+function CollapsibleHistory({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="space-y-1.5">
+      <button type="button" onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 w-full text-[11px] font-semibold uppercase tracking-wider text-muted-foreground py-1 hover:text-foreground transition-colors">
+        <ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-200', open && 'rotate-180')} />
+        {title} ({count})
+      </button>
+      {open && children}
+    </div>
+  );
+}
+
+function PaginatedItems<T>({ items, renderItem }: { items: T[]; renderItem: (item: T, i: number) => React.ReactNode }) {
+  const [visible, setVisible] = useState(HISTORY_PAGE);
+  const remaining = items.length - visible;
+  return (
+    <div className="space-y-1.5">
+      {items.slice(0, visible).map((item, i) => renderItem(item, i))}
+      {remaining > 0 && (
+        <button type="button"
+          onClick={() => setVisible((v) => v + HISTORY_PAGE)}
+          className="w-full text-center text-xs text-primary hover:text-primary/80 py-1 font-medium transition-colors">
+          Show {Math.min(HISTORY_PAGE, remaining)} more
+        </button>
+      )}
+    </div>
+  );
+}
+
+const REVIEW_CHAR_LIMIT = 500;
+
+function ReviewInline({ shareId }: { shareId: string }) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState('');
+  const commentRef = useRef<HTMLTextAreaElement>(null);
+
+  const { data: review = null, isLoading } = useQuery({
+    queryKey: queryKeys.shares.review(shareId),
+    queryFn: async () => {
+      try { return await api.get<ShareReview>(`/api/shares/${shareId}/review`); }
+      catch (e) { if (e instanceof ApiError && (e as ApiError).status === 404) return null; throw e; }
+    },
+    enabled: open,
+  });
+
+  useEffect(() => {
+    if (review) { setRating(review.rating); setComment(review.comment ?? ''); }
+  }, [review]);
+
+  useEffect(() => {
+    if (commentRef.current) {
+      commentRef.current.style.height = 'auto';
+      commentRef.current.style.height = `${commentRef.current.scrollHeight}px`;
+    }
+  }, [comment]);
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      review
+        ? api.patch(`/api/shares/${shareId}/review`, { rating, comment: comment.trim() || null })
+        : api.post(`/api/shares/${shareId}/review`, { rating, comment: comment.trim() || null }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.shares.review(shareId) });
+      toast.success(review ? 'Review Updated' : 'Review Saved');
+      setOpen(false);
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Failed'),
+  });
+
+  return (
+    <div className="pt-1">
+      <button type="button" onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1 text-[11px] font-medium text-primary hover:text-primary/80 transition-colors">
+        <Star className="h-3 w-3" />
+        {open ? 'Cancel' : review ? 'Edit Review' : 'Leave a Review'}
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2 rounded-lg border border-border/60 bg-muted/20 p-3">
+          {isLoading ? (
+            <div className="flex justify-center py-2">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary/30 border-t-transparent" />
+            </div>
+          ) : (
+            <>
+              <HalfStarPicker value={rating} onChange={setRating} size={5} />
+              <div className="relative">
+                <Textarea
+                  ref={commentRef}
+                  placeholder="Comment (optional)…"
+                  className="resize-none overflow-hidden text-sm min-h-[64px] pb-5"
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value.slice(0, REVIEW_CHAR_LIMIT))}
+                  maxLength={REVIEW_CHAR_LIMIT}
+                />
+                <span className={`absolute bottom-1.5 right-2 text-[10px] pointer-events-none ${comment.length >= REVIEW_CHAR_LIMIT ? 'text-destructive' : 'text-muted-foreground/60'}`}>
+                  {comment.length}/{REVIEW_CHAR_LIMIT}
+                </span>
+              </div>
+              <Button size="sm" className="w-full h-8"
+                disabled={rating === 0 || saveMutation.isPending}
+                onClick={() => saveMutation.mutate()}>
+                {saveMutation.isPending ? 'Saving…' : review ? 'Update Review' : 'Save Review'}
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Shares section ───────────────────────────────────────────────────────────
 
 function SharesSection() {
@@ -1556,32 +1725,37 @@ function SharesSection() {
           )}
 
           {pastReceived.length > 0 && (
-            <div className="space-y-1.5 pt-1">
-              {(pendingShares.length > 0 || recipeRequests.length > 0) && (
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">History</p>
-              )}
-              {pastReceived.map((s) => (
-                <div key={s.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/40 px-3 py-2.5">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{s.recipeTitle ?? 'Untitled'}</p>
-                    <p className="text-xs text-muted-foreground">From {s.fromUserName ?? 'someone'}</p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {s.status === 'ACCEPTED' && s.copiedRecipeId && (
-                      <Badge variant="default" className="text-[10px]">In Book</Badge>
-                    )}
-                    {s.status === 'ACCEPTED' && !s.copiedRecipeId && (
-                      <Button size="sm" variant="outline" className="h-7 text-xs border-border/60"
-                        onClick={() => openRename(s, 'recopy')} disabled={recopyMutation.isPending}>
-                        Re-Add
-                      </Button>
-                    )}
-                    {s.status !== 'ACCEPTED' && (
-                      <Badge variant="outline" className="text-[10px] border-border/60">{s.status}</Badge>
-                    )}
-                  </div>
-                </div>
-              ))}
+            <div className="pt-1">
+              <CollapsibleHistory title="History" count={pastReceived.length}>
+                <PaginatedItems
+                  items={pastReceived}
+                  renderItem={(s) => (
+                    <div key={s.id} className="rounded-xl border border-border/60 bg-card/40 px-3 py-2.5 space-y-0">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{s.recipeTitle ?? 'Untitled'}</p>
+                          <p className="text-xs text-muted-foreground">From {s.fromUserName ?? 'someone'}</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {s.status === 'ACCEPTED' && s.copiedRecipeId && (
+                            <Badge variant="default" className="text-[10px]">In Book</Badge>
+                          )}
+                          {s.status === 'ACCEPTED' && !s.copiedRecipeId && (
+                            <Button size="sm" variant="outline" className="h-7 text-xs border-border/60"
+                              onClick={() => openRename(s, 'recopy')} disabled={recopyMutation.isPending}>
+                              Re-Add
+                            </Button>
+                          )}
+                          {s.status !== 'ACCEPTED' && (
+                            <Badge variant="outline" className="text-[10px] border-border/60">{s.status}</Badge>
+                          )}
+                        </div>
+                      </div>
+                      {s.status === 'ACCEPTED' && <ReviewInline shareId={s.id} />}
+                    </div>
+                  )}
+                />
+              </CollapsibleHistory>
             </div>
           )}
         </TabsContent>
@@ -1648,19 +1822,21 @@ function SharesSection() {
           )}
 
           {pastSent.length > 0 && (
-            <div className="space-y-1.5">
-              {(pendingRequests.length > 0 || pendingSentOther.length > 0) && (
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mt-2">History</p>
-              )}
-              {pastSent.map((s) => (
-                <div key={s.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/40 px-3 py-2.5">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{s.recipeTitle ?? 'Untitled'}</p>
-                    <p className="text-xs text-muted-foreground">To {s.toUserName ?? 'someone'}</p>
-                  </div>
-                  <Badge variant={s.status === 'ACCEPTED' ? 'default' : 'outline'} className="text-[10px] shrink-0 border-border/60">{s.status}</Badge>
-                </div>
-              ))}
+            <div className="pt-1">
+              <CollapsibleHistory title="History" count={pastSent.length}>
+                <PaginatedItems
+                  items={pastSent}
+                  renderItem={(s) => (
+                    <div key={s.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/40 px-3 py-2.5">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{s.recipeTitle ?? 'Untitled'}</p>
+                        <p className="text-xs text-muted-foreground">To {s.toUserName ?? 'someone'}</p>
+                      </div>
+                      <Badge variant={s.status === 'ACCEPTED' ? 'default' : 'outline'} className="text-[10px] shrink-0 border-border/60">{s.status}</Badge>
+                    </div>
+                  )}
+                />
+              </CollapsibleHistory>
             </div>
           )}
         </TabsContent>

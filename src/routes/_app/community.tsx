@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import {
   Search, Users, BookOpen, UserPlus, UserMinus,
-  Send, UtensilsCrossed, Lock, Plus, ChevronRight,
+  Send, UtensilsCrossed, Lock, Plus, ChevronRight, ChevronDown,
   Trash2, Star, ChevronLeft, LayoutList, X, Scale, ChefHat, MessageSquare,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -114,12 +114,24 @@ function convertQty(qty: string | null, unit: string | null, system: MeasureSyst
 }
 
 function convertStepText(step: string, system: MeasureSystem): string {
-  return step.replace(/(\d+(?:\.\d+)?)\s*°([CF])/g, (_, num, unit) => {
-    const n = parseFloat(num);
-    if (system === 'imperial' && unit === 'C') return `${round(n * 9 / 5 + 32)}°F`;
-    if (system === 'metric' && unit === 'F') return `${round((n - 32) * 5 / 9)}°C`;
-    return `${num}°${unit}`;
-  });
+  return step
+    .replace(/(\d+(?:\.\d+)?)\s*°\s*([CcFf])\b/g, (_, num, unit) => {
+      const n = parseFloat(num);
+      const u = unit.toUpperCase() as 'C' | 'F';
+      if (system === 'imperial' && u === 'C') return `${round(n * 9 / 5 + 32)}°F`;
+      if (system === 'metric' && u === 'F') return `${round((n - 32) * 5 / 9)}°C`;
+      return `${num}°${u}`;
+    })
+    .replace(/(\d+(?:\.\d+)?)\s+degrees?\s+(celsius|fahrenheit|centigrade|[CF])\b/gi, (_, num, unit) => {
+      const n = parseFloat(num);
+      const u = unit.toLowerCase();
+      const isC = u === 'c' || u === 'celsius' || u === 'centigrade';
+      const isF = u === 'f' || u === 'fahrenheit';
+      if (!isC && !isF) return _;
+      if (system === 'imperial' && isC) return `${round(n * 9 / 5 + 32)}°F`;
+      if (system === 'metric' && isF) return `${round((n - 32) * 5 / 9)}°C`;
+      return `${num}°${isC ? 'C' : 'F'}`;
+    });
 }
 
 function scaleQty(qty: string | null, base: number, target: number): string | null {
@@ -130,29 +142,59 @@ function scaleQty(qty: string | null, base: number, target: number): string | nu
 }
 
 function StarDisplay({ rating, count }: { rating: number; count?: number }) {
+  const rounded = Math.round(rating * 2) / 2;
   return (
     <div className="flex items-center gap-1">
       <div className="flex gap-0.5">
-        {[1, 2, 3, 4, 5].map((i) => (
-          <Star key={i} className={cn('h-3 w-3', i <= Math.round(rating) ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/25')} />
-        ))}
+        {[1, 2, 3, 4, 5].map((i) => {
+          const state: 'full' | 'half' | 'empty' =
+            rounded >= i ? 'full' : rounded >= i - 0.5 ? 'half' : 'empty';
+          if (state === 'full') return <Star key={i} className="h-3 w-3 fill-amber-400 text-amber-400" />;
+          if (state === 'half') return (
+            <span key={i} className="relative inline-block h-3 w-3">
+              <Star className="h-3 w-3 text-muted-foreground/25" />
+              <Star className="absolute inset-0 h-3 w-3 fill-amber-400 text-amber-400 [clip-path:inset(0_50%_0_0)]" />
+            </span>
+          );
+          return <Star key={i} className="h-3 w-3 text-muted-foreground/25" />;
+        })}
       </div>
       {count !== undefined && <span className="text-[10px] text-muted-foreground">({count})</span>}
     </div>
   );
 }
 
-function InteractiveStars({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  const [hover, setHover] = useState(0);
+function HalfStarPicker({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const [hovered, setHovered] = useState<number | null>(null);
+  const display = hovered ?? value;
   return (
-    <div className="flex gap-1">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <button key={i} type="button"
-          onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(0)}
-          onClick={() => onChange(i)} className="focus:outline-none">
-          <Star className={cn('h-6 w-6 transition-colors', (hover || value) >= i ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/30')} />
-        </button>
-      ))}
+    <div className="flex gap-1" onMouseLeave={() => setHovered(null)}>
+      {[1, 2, 3, 4, 5].map((star) => {
+        const state: 'full' | 'half' | 'empty' =
+          display >= star ? 'full' : display >= star - 0.5 ? 'half' : 'empty';
+        return (
+          <div key={star} className="relative h-6 w-6 cursor-pointer">
+            {state === 'full' && <Star className="h-6 w-6 fill-amber-400 text-amber-400" />}
+            {state === 'half' && (
+              <>
+                <Star className="h-6 w-6 text-muted-foreground/30" />
+                <Star className="absolute inset-0 h-6 w-6 fill-amber-400 text-amber-400 [clip-path:inset(0_50%_0_0)]" />
+              </>
+            )}
+            {state === 'empty' && <Star className="h-6 w-6 text-muted-foreground/30" />}
+            <button type="button"
+              className="absolute inset-y-0 left-0 w-1/2 focus:outline-none"
+              onMouseEnter={() => setHovered(star - 0.5)}
+              onClick={() => onChange(star - 0.5)}
+            />
+            <button type="button"
+              className="absolute inset-y-0 right-0 w-1/2 focus:outline-none"
+              onMouseEnter={() => setHovered(star)}
+              onClick={() => onChange(star)}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -220,7 +262,6 @@ function UserProfileModal({ target, meId, open, onClose }: {
           {!isLoading && activePins.length > 0 && (
             <div className="space-y-2">
               <p className="text-sm font-semibold">Pinned Recipes</p>
-              {!isCurrentUser && <p className="text-xs text-muted-foreground">Tap a recipe to request it.</p>}
               <div className="space-y-2.5">
                 {activePins.map((pin) => (
                   <div key={pin.position}
@@ -250,7 +291,61 @@ function UserProfileModal({ target, meId, open, onClose }: {
   );
 }
 
+// ─── Reviews section (collapsible) ───────────────────────────────────────────
+
+const REVIEWS_PREVIEW = 3;
+
+function ReviewsSection({ reviews }: { reviews: RecipeReview[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? reviews : reviews.slice(0, REVIEWS_PREVIEW);
+
+  return (
+    <div className="space-y-3 pt-1 border-t">
+      <button type="button" onClick={() => setExpanded((v) => !v)}
+        className="flex items-center gap-1.5 w-full text-xs font-semibold uppercase tracking-wider text-muted-foreground pt-1 hover:text-foreground transition-colors">
+        <MessageSquare className="h-3.5 w-3.5" />
+        Reviews
+        {reviews.length > 0 && <span className="normal-case font-normal">({reviews.length})</span>}
+        {reviews.length > REVIEWS_PREVIEW && (
+          <ChevronDown className={cn('h-3.5 w-3.5 ml-auto transition-transform duration-200', expanded && 'rotate-180')} />
+        )}
+      </button>
+
+      {reviews.length === 0
+        ? <p className="text-xs text-muted-foreground text-center py-4 italic">No reviews yet.</p>
+        : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {visible.map((r) => (
+              <div key={r.id} className="rounded-xl border bg-card px-3 py-3 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <Avatar className="h-7 w-7">
+                    <AvatarImage src={r.reviewerImage ?? undefined} />
+                    <AvatarFallback className="text-[10px]">{initials(r.reviewerName, r.reviewerHandle ?? '?')}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold truncate">{r.reviewerName ?? r.reviewerHandle ?? 'User'}</p>
+                  </div>
+                  <StarDisplay rating={r.rating} />
+                </div>
+                {r.comment && <p className="text-sm text-foreground/80 leading-relaxed">{r.comment}</p>}
+                <p className="text-[10px] text-muted-foreground/50">{formatDate(r.updatedAt)}</p>
+              </div>
+            ))}
+            {!expanded && reviews.length > REVIEWS_PREVIEW && (
+              <button type="button" onClick={() => setExpanded(true)}
+                className="w-full text-center text-xs text-primary hover:text-primary/80 font-medium py-1 transition-colors">
+                Show all {reviews.length} reviews
+              </button>
+            )}
+          </div>
+        )}
+    </div>
+  );
+}
+
 // ─── Recipe Detail Modal ──────────────────────────────────────────────────────
+
+const REVIEW_CHAR_LIMIT = 500;
 
 function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null; meId: string; onClose: () => void }) {
   const queryClient = useQueryClient();
@@ -260,6 +355,7 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
   const [showReviewForm, setShowReviewForm] = useState(false);
+  const reviewCommentRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: recipe } = useQuery({
     queryKey: queryKeys.community.postRecipe(post?.id ?? ''),
@@ -297,12 +393,39 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
     (s) => s.recipeId === post?.recipeId && s.status === 'ACCEPTED'
   );
 
+  const { data: myReview = null } = useQuery({
+    queryKey: queryKeys.shares.review(myShare?.id ?? ''),
+    queryFn: async () => {
+      try { return await api.get<{ rating: number; comment: string | null }>(`/api/shares/${myShare!.id}/review`); }
+      catch (e) { if (e instanceof ApiError && (e as ApiError).status === 404) return null; throw e; }
+    },
+    enabled: !!myShare,
+  });
+
+  useEffect(() => {
+    if (myReview && showReviewForm) {
+      setReviewRating(myReview.rating);
+      setReviewComment(myReview.comment ?? '');
+    }
+  }, [myReview, showReviewForm]);
+
+  useEffect(() => {
+    if (reviewCommentRef.current) {
+      reviewCommentRef.current.style.height = 'auto';
+      reviewCommentRef.current.style.height = `${reviewCommentRef.current.scrollHeight}px`;
+    }
+  }, [reviewComment]);
+
   const submitReview = useMutation({
-    mutationFn: () => api.post(`/api/shares/${myShare!.id}/review`, { rating: reviewRating, comment: reviewComment || null }),
+    mutationFn: () =>
+      myReview
+        ? api.patch(`/api/shares/${myShare!.id}/review`, { rating: reviewRating, comment: reviewComment || null })
+        : api.post(`/api/shares/${myShare!.id}/review`, { rating: reviewRating, comment: reviewComment || null }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.community.postReviews(post!.id) });
-      toast.success('Review Submitted');
-      setReviewRating(0); setReviewComment('');
+      void queryClient.invalidateQueries({ queryKey: queryKeys.shares.review(myShare!.id) });
+      toast.success(myReview ? 'Review Updated' : 'Review Submitted');
+      setShowReviewForm(false);
     },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Failed To Submit Review'),
   });
@@ -328,7 +451,7 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
 
   return (
     <Dialog open={!!post} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="w-[calc(100vw-24px)] max-w-lg p-0 gap-0 overflow-hidden flex flex-col max-h-[90vh]" hideClose>
+      <DialogContent className="w-[calc(100vw-24px)] max-w-lg sm:max-w-xl lg:max-w-2xl p-0 gap-0 overflow-hidden flex flex-col max-h-[90vh]" hideClose>
         {/* Custom themed close button */}
         <DialogClose className="absolute right-3 top-3 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-background/90 border border-border/60 shadow-md text-foreground hover:bg-muted transition-colors backdrop-blur-sm">
           <X className="h-4 w-4" />
@@ -436,50 +559,32 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
               )}
 
               {/* Reviews */}
-              <div className="space-y-3 pt-1 border-t">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 pt-1">
-                  <MessageSquare className="h-3.5 w-3.5" />Reviews
-                  {reviews.length > 0 && <span className="normal-case font-normal">({reviews.length})</span>}
-                </p>
-
-                {reviews.length === 0
-                  ? <p className="text-xs text-muted-foreground text-center py-4 italic">No reviews yet.</p>
-                  : (
-                    <div className="space-y-3">
-                      {reviews.map((r) => (
-                        <div key={r.id} className="rounded-xl border bg-card px-3 py-3 space-y-1.5">
-                          <div className="flex items-center gap-2">
-                            <Avatar className="h-7 w-7">
-                              <AvatarImage src={r.reviewerImage ?? undefined} />
-                              <AvatarFallback className="text-[10px]">{initials(r.reviewerName, r.reviewerHandle ?? '?')}</AvatarFallback>
-                            </Avatar>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs font-semibold truncate">{r.reviewerName ?? r.reviewerHandle ?? 'User'}</p>
-                            </div>
-                            <StarDisplay rating={r.rating} />
-                          </div>
-                          {r.comment && <p className="text-sm text-foreground/80 leading-relaxed">{r.comment}</p>}
-                          <p className="text-[10px] text-muted-foreground/50">{formatDate(r.updatedAt)}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-              </div>
+              <ReviewsSection reviews={reviews} />
 
               {/* Rate & review form — toggled from bottom bar */}
               {showReviewForm && !post.isOwnPost && (
                 <div className="rounded-xl border bg-muted/30 px-3 py-3 space-y-3">
-                  <p className="text-xs font-medium">Leave A Review</p>
+                  <p className="text-xs font-medium">{myReview ? 'Edit Your Review' : 'Leave A Review'}</p>
                   {myShare ? (
                     <>
-                      <InteractiveStars value={reviewRating} onChange={setReviewRating} />
-                      <Textarea placeholder="Share your thoughts on this recipe…"
-                        className="resize-none text-sm min-h-[72px]"
-                        value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} maxLength={2000} />
+                      <HalfStarPicker value={reviewRating} onChange={setReviewRating} />
+                      <div className="relative">
+                        <Textarea
+                          ref={reviewCommentRef}
+                          placeholder="Share your thoughts on this recipe…"
+                          className="resize-none overflow-hidden text-sm min-h-[72px] pb-5"
+                          value={reviewComment}
+                          onChange={(e) => setReviewComment(e.target.value.slice(0, REVIEW_CHAR_LIMIT))}
+                          maxLength={REVIEW_CHAR_LIMIT}
+                        />
+                        <span className={`absolute bottom-1.5 right-2 text-[10px] pointer-events-none ${reviewComment.length >= REVIEW_CHAR_LIMIT ? 'text-destructive' : 'text-muted-foreground/60'}`}>
+                          {reviewComment.length}/{REVIEW_CHAR_LIMIT}
+                        </span>
+                      </div>
                       <Button size="sm" className="w-full"
                         disabled={reviewRating === 0 || submitReview.isPending}
                         onClick={() => submitReview.mutate()}>
-                        {submitReview.isPending ? 'Submitting…' : 'Submit Review'}
+                        {submitReview.isPending ? 'Saving…' : myReview ? 'Update Review' : 'Submit Review'}
                       </Button>
                     </>
                   ) : (
@@ -501,8 +606,14 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
             </Button>
             <Button size="sm" variant={showReviewForm ? 'default' : 'outline'}
               className="flex-1 h-8 text-xs gap-1.5"
-              onClick={() => setShowReviewForm((v) => !v)}>
-              <MessageSquare className="h-3.5 w-3.5" />Rate & Review
+              onClick={() => {
+                if (!showReviewForm && myReview) {
+                  setReviewRating(myReview.rating);
+                  setReviewComment(myReview.comment ?? '');
+                }
+                setShowReviewForm((v) => !v);
+              }}>
+              <MessageSquare className="h-3.5 w-3.5" />{myReview ? 'Edit Review' : 'Rate & Review'}
             </Button>
           </div>
         )}
@@ -631,7 +742,7 @@ function CommunityPage() {
 
   return (
     <div className="flex flex-col items-center px-4 pb-24 pt-6">
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-md sm:max-w-xl lg:w-[65%] lg:max-w-none">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <div className="rounded-t-2xl border border-b-0 overflow-hidden">
             <TabsList className="w-full h-12 rounded-none bg-card border-b p-0 gap-0">
@@ -799,7 +910,7 @@ function FeedTab({ meId, filterUserId, filterUserName, onClearFilter }: {
         </div>
       )}
 
-      <div className="space-y-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
         {paginated.map((post) => (
           <PostCard key={post.id} post={post} meId={meId}
             onFollow={() => followMutation.mutate(post.userId)}
