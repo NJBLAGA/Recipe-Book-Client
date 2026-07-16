@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { BookOpenText, Mail } from 'lucide-react';
+import { BookOpenText, Eye, EyeOff } from 'lucide-react';
 import { useState } from 'react';
 import { authClient } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
@@ -24,7 +24,8 @@ export const Route = createFileRoute('/_auth/sign-up')({
 
 const schema = z
   .object({
-    name: z.string().min(2, 'Name must be at least 2 characters'),
+    firstName: z.string().min(1, 'First name is required').max(50),
+    lastName: z.string().min(1, 'Last name is required').max(50),
     email: z.string().email('Enter a valid email'),
     password: z.string().min(8, 'Password must be at least 8 characters'),
     confirmPassword: z.string(),
@@ -37,20 +38,25 @@ const schema = z
 type FormValues = z.infer<typeof schema>;
 
 function SignUpPage() {
-  const [verifyEmail, setVerifyEmail] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: standardSchemaResolver(schema),
-    defaultValues: { name: '', email: '', password: '', confirmPassword: '' },
+    defaultValues: { firstName: '', lastName: '', email: '', password: '', confirmPassword: '' },
   });
 
   const { isSubmitting } = form.formState;
 
   async function onSubmit(values: FormValues) {
+    const name = `${values.firstName.trim()} ${values.lastName.trim()}`.trim();
     const { error } = await authClient.signUp.email({
-      name: values.name,
+      name,
       email: values.email,
       password: values.password,
+      // @ts-expect-error additional fields accepted by the backend additionalFields config
+      firstName: values.firstName.trim(),
+      lastName: values.lastName.trim(),
     });
 
     if (error) {
@@ -58,35 +64,11 @@ function SignUpPage() {
       return;
     }
 
-    setVerifyEmail(values.email);
+    window.location.href = '/sign-in?emailSent=true';
   }
 
   async function signInWithGoogle() {
-    await authClient.signIn.social({
-      provider: 'google',
-      callbackURL: '/',
-    });
-  }
-
-  if (verifyEmail) {
-    return (
-      <div className="w-full max-w-sm space-y-6 text-center">
-        <div className="bg-muted mx-auto flex h-16 w-16 items-center justify-center rounded-full">
-          <Mail className="text-primary h-8 w-8" />
-        </div>
-        <div className="space-y-2">
-          <h2 className="text-xl font-semibold">Check your email</h2>
-          <p className="text-muted-foreground text-sm">
-            We sent a verification link to{' '}
-            <span className="text-foreground font-medium">{verifyEmail}</span>. Click it to
-            activate your account, then sign in.
-          </p>
-        </div>
-        <Button variant="outline" className="w-full" asChild>
-          <Link to="/sign-in">Back to sign in</Link>
-        </Button>
-      </div>
-    );
+    await authClient.signIn.social({ provider: 'google', callbackURL: window.location.origin + '/' });
   }
 
   return (
@@ -103,25 +85,45 @@ function SignUpPage() {
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Full name</FormLabel>
-                <FormControl>
-                  <Input
-                    type="text"
-                    placeholder="Nathan Blaga"
-                    autoComplete="name"
-                    autoFocus
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <div className="grid grid-cols-2 gap-3">
+            <FormField
+              control={form.control}
+              name="firstName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>First name</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="text"
+                      placeholder="Nathan"
+                      autoComplete="given-name"
+                      autoFocus
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="lastName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Last name</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="text"
+                      placeholder="Blaga"
+                      autoComplete="family-name"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
 
           <FormField
             control={form.control}
@@ -149,12 +151,23 @@ function SignUpPage() {
               <FormItem>
                 <FormLabel>Password</FormLabel>
                 <FormControl>
-                  <Input
-                    type="password"
-                    placeholder="••••••••"
-                    autoComplete="new-password"
-                    {...field}
-                  />
+                  <div className="relative">
+                    <Input
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      autoComplete="new-password"
+                      className="pr-10"
+                      {...field}
+                    />
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="text-muted-foreground hover:text-foreground absolute right-3 top-1/2 -translate-y-1/2"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -168,12 +181,23 @@ function SignUpPage() {
               <FormItem>
                 <FormLabel>Confirm password</FormLabel>
                 <FormControl>
-                  <Input
-                    type="password"
-                    placeholder="••••••••"
-                    autoComplete="new-password"
-                    {...field}
-                  />
+                  <div className="relative">
+                    <Input
+                      type={showConfirm ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      autoComplete="new-password"
+                      className="pr-10"
+                      {...field}
+                    />
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onClick={() => setShowConfirm((v) => !v)}
+                      className="text-muted-foreground hover:text-foreground absolute right-3 top-1/2 -translate-y-1/2"
+                    >
+                      {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -192,19 +216,17 @@ function SignUpPage() {
         <Separator className="flex-1" />
       </div>
 
-      <Button
-        variant="outline"
-        className="w-full gap-2"
-        onClick={signInWithGoogle}
-        type="button"
-      >
+      <Button variant="outline" className="w-full gap-2" onClick={signInWithGoogle} type="button">
         <GoogleIcon />
         Continue with Google
       </Button>
 
       <p className="text-muted-foreground text-center text-sm">
         Already have an account?{' '}
-        <Link to="/sign-in" className="text-foreground font-medium underline-offset-4 hover:underline">
+        <Link
+          to="/sign-in"
+          className="text-foreground font-medium underline-offset-4 hover:underline"
+        >
           Sign in
         </Link>
       </p>

@@ -3,7 +3,8 @@ import { useForm } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { BookOpenText } from 'lucide-react';
+import { BookOpenText, Eye, EyeOff, Mail } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { authClient } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,6 +31,26 @@ type FormValues = z.infer<typeof schema>;
 
 function SignInPage() {
   const navigate = useNavigate();
+  const [showPassword, setShowPassword] = useState(false);
+  const [showEmailSent, setShowEmailSent] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('emailSent') === 'true';
+  });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('verified') === 'true') {
+      toast.success('Email verified — you can now sign in.');
+      window.history.replaceState({}, '', '/sign-in');
+    }
+    if (params.get('passwordReset') === 'true') {
+      toast.success('Password reset — you can now sign in with your new password.');
+      window.history.replaceState({}, '', '/sign-in');
+    }
+    if (params.get('emailSent') === 'true') {
+      window.history.replaceState({}, '', '/sign-in');
+    }
+  }, []);
 
   const form = useForm<FormValues>({
     resolver: standardSchemaResolver(schema),
@@ -55,8 +76,28 @@ function SignInPage() {
   async function signInWithGoogle() {
     await authClient.signIn.social({
       provider: 'google',
-      callbackURL: '/',
+      callbackURL: window.location.origin + '/',
     });
+  }
+
+  if (showEmailSent) {
+    return (
+      <div className="w-full max-w-sm space-y-6 text-center">
+        <div className="bg-muted mx-auto flex h-16 w-16 items-center justify-center rounded-full">
+          <Mail className="text-primary h-8 w-8" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-xl font-semibold">Check your email</h2>
+          <p className="text-muted-foreground text-sm">
+            We sent a verification link to your email. Click it to activate your account, then
+            come back and sign in.
+          </p>
+        </div>
+        <Button className="w-full" onClick={() => setShowEmailSent(false)}>
+          Sign in
+        </Button>
+      </div>
+    );
   }
 
   return (
@@ -100,17 +141,41 @@ function SignInPage() {
               <FormItem>
                 <FormLabel>Password</FormLabel>
                 <FormControl>
-                  <Input
-                    type="password"
-                    placeholder="••••••••"
-                    autoComplete="current-password"
-                    {...field}
-                  />
+                  <div className="relative">
+                    <Input
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      autoComplete="current-password"
+                      className="pr-10"
+                      {...field}
+                    />
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="text-muted-foreground hover:text-foreground absolute right-3 top-1/2 -translate-y-1/2"
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
+
+          <div className="flex justify-end">
+            <Link
+              to="/forgot-password"
+              className="text-muted-foreground text-sm underline-offset-4 hover:text-foreground hover:underline"
+            >
+              Forgot password?
+            </Link>
+          </div>
 
           <Button type="submit" className="w-full" disabled={isSubmitting}>
             {isSubmitting ? 'Signing in…' : 'Sign in'}
@@ -136,7 +201,10 @@ function SignInPage() {
 
       <p className="text-muted-foreground text-center text-sm">
         Don&apos;t have an account?{' '}
-        <Link to="/sign-up" className="text-foreground font-medium underline-offset-4 hover:underline">
+        <Link
+          to="/sign-up"
+          className="text-foreground font-medium underline-offset-4 hover:underline"
+        >
           Sign up
         </Link>
       </p>

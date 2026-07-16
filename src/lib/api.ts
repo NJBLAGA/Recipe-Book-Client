@@ -17,8 +17,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new ApiError(res.status, body.error ?? res.statusText);
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, body.message ?? body.error ?? res.statusText);
+  }
+
+  return res.json() as Promise<T>;
+}
+
+async function requestForm<T>(path: string, body: FormData, method = 'POST'): Promise<T> {
+  const res = await fetch(path, { method, credentials: 'include', body });
+
+  if (!res.ok) {
+    const b = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, b.message ?? b.error ?? res.statusText);
   }
 
   return res.json() as Promise<T>;
@@ -31,4 +42,5 @@ export const api = {
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  postForm: <T>(path: string, body: FormData) => requestForm<T>(path, body),
 };
