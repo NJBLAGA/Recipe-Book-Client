@@ -1362,6 +1362,7 @@ function InviteSection({ householdId, meId }: { householdId: string; meId: strin
         <InviteUserProfileModal
           user={profileUser}
           meId={meId}
+          isHousehold={profileUser.householdId === householdId}
           open={!!profileUser}
           onClose={() => setProfileUser(null)}
           onInvite={(userId) => { inviteMutation.mutate(userId); setProfileUser(null); }}
@@ -1600,8 +1601,8 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
   );
 }
 
-function InviteUserProfileModal({ user: u, meId, open, onClose, onInvite, inviting }: {
-  user: SearchUser; meId: string; open: boolean; onClose: () => void;
+function InviteUserProfileModal({ user: u, meId, isHousehold, open, onClose, onInvite, inviting }: {
+  user: SearchUser; meId: string; isHousehold: boolean; open: boolean; onClose: () => void;
   onInvite: (userId: string) => void; inviting: boolean;
 }) {
   const queryClient = useQueryClient();
@@ -1679,8 +1680,8 @@ function InviteUserProfileModal({ user: u, meId, open, onClose, onInvite, inviti
                 <div className="space-y-2.5">
                   {activePins.map((pin) => (
                     <PinCard key={pin.position} pin={pin}
-                      onView={u.handle ? () => setPinViewTarget({ recipeId: pin.recipeId!, recipeTitle: pin.recipeTitle, recipeDescription: pin.recipeDescription, recipeImage: pin.recipeImage, ownerHandle: u.handle!, ownerId: u.id, sameHousehold: false }) : undefined}
-                      onRequest={u.handle && u.id !== meId ? () => { setRequestingId(pin.recipeId!); pinRequestMutation.mutate({ recipeId: pin.recipeId!, ownerId: u.id }); } : undefined}
+                      onView={u.handle ? () => setPinViewTarget({ recipeId: pin.recipeId!, recipeTitle: pin.recipeTitle, recipeDescription: pin.recipeDescription, recipeImage: pin.recipeImage, ownerHandle: u.handle!, ownerId: u.id, sameHousehold: isHousehold }) : undefined}
+                      onRequest={!isHousehold && u.handle && u.id !== meId ? () => { setRequestingId(pin.recipeId!); pinRequestMutation.mutate({ recipeId: pin.recipeId!, ownerId: u.id }); } : undefined}
                       requesting={requestingId === pin.recipeId && pinRequestMutation.isPending}
                     />
                   ))}
@@ -1688,9 +1689,16 @@ function InviteUserProfileModal({ user: u, meId, open, onClose, onInvite, inviti
               </div>
             )}
 
-            <Button className="w-full gap-2" onClick={() => onInvite(u.id)} disabled={inviting}>
-              <UserPlus className="h-4 w-4" />{inviting ? 'Sending…' : 'Invite To Household'}
-            </Button>
+            {isHousehold ? (
+              <div className="flex items-center justify-center gap-2 rounded-xl border border-border/40 bg-muted/40 px-3 py-2.5">
+                <Users className="h-4 w-4 text-muted-foreground shrink-0" />
+                <p className="text-sm text-muted-foreground">Already in your household</p>
+              </div>
+            ) : (
+              <Button className="w-full gap-2" onClick={() => onInvite(u.id)} disabled={inviting}>
+                <UserPlus className="h-4 w-4" />{inviting ? 'Sending…' : 'Invite To Household'}
+              </Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>
