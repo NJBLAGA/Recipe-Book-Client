@@ -145,13 +145,68 @@
   }
 }
 
-/* Move Sonner close button to the right inside the toast */
-[data-sonner-toast] > [data-close-button] {
-  right: 8px !important;
+/* ─── Sonner toast overrides ────────────────────────────────────────────────── */
+
+/* Sonner toaster must remain interactive even when a Radix Dialog is open.
+   react-remove-scroll applies .block-interactivity-{id} (pointer-events:none) to
+   body children outside the dialog portal — override it here. */
+[data-sonner-toaster],
+[data-sonner-toast],
+[data-sonner-toast] * {
+  pointer-events: all !important;
+}
+
+/* Close button: right side, vertically centered */
+[data-sonner-toast] [data-close-button] {
+  right: 10px !important;
   left: auto !important;
   top: 50% !important;
+  bottom: auto !important;
   transform: translateY(-50%) !important;
-  border-radius: var(--radius-sm) !important;
+  border-radius: 50% !important;
+  position: absolute !important;
+  cursor: pointer !important;
+}
+
+/* Push toast content right to clear the close button */
+[data-sonner-toast] {
+  padding-right: 2.75rem !important;
+}
+
+/* Success — green */
+[data-sonner-toast][data-type="success"] {
+  background: #14532d !important;
+  border-color: #166534 !important;
+  color: #dcfce7 !important;
+}
+.dark [data-sonner-toast][data-type="success"] {
+  background: rgb(5 46 22 / 0.7) !important;
+  border-color: #166534 !important;
+  color: #dcfce7 !important;
+}
+
+/* Error — red */
+[data-sonner-toast][data-type="error"] {
+  background: #7f1d1d !important;
+  border-color: #991b1b !important;
+  color: #fee2e2 !important;
+}
+.dark [data-sonner-toast][data-type="error"] {
+  background: rgb(69 10 10 / 0.7) !important;
+  border-color: #991b1b !important;
+  color: #fee2e2 !important;
+}
+
+/* Warning — amber */
+[data-sonner-toast][data-type="warning"] {
+  background: #78350f !important;
+  border-color: #92400e !important;
+  color: #fef3c7 !important;
+}
+.dark [data-sonner-toast][data-type="warning"] {
+  background: rgb(69 26 3 / 0.7) !important;
+  border-color: #92400e !important;
+  color: #fef3c7 !important;
 }
 
 @layer base {

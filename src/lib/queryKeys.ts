@@ -10,6 +10,7 @@ export const queryKeys = {
     search: (handle: string) => ['users', 'search', handle] as const,
     profile: (handle: string) => ['users', 'profile', handle] as const,
     community: (search: string) => ['users', 'community', search] as const,
+    pinRecipe: (handle: string, recipeId: string) => ['users', 'pin-recipe', handle, recipeId] as const,
   },
   shares: {
     received: () => ['shares', 'received'] as const,
@@ -21,7 +22,7 @@ export const queryKeys = {
     recipes: (search: string) => ['recipe-book', 'recipes', search] as const,
   },
   community: {
-    posts: (userId?: string, since?: string) => ['community', 'posts', userId ?? '', since ?? 'all'] as const,
+    posts: (userId?: string, from?: string, to?: string) => ['community', 'posts', userId ?? '', from ?? '', to ?? ''] as const,
     followingPosts: () => ['community', 'posts', 'following'] as const,
     postRecipe: (postId: string) => ['community', 'posts', postId, 'recipe'] as const,
     postReviews: (postId: string) => ['community', 'posts', postId, 'reviews'] as const,

@@ -1,15 +1,18 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Search, Users, BookOpen, UserPlus, UserMinus,
   Send, UtensilsCrossed, Lock, Plus, ChevronRight, ChevronDown,
-  Trash2, Star, ChevronLeft, LayoutList, X, Scale, ChefHat, MessageSquare,
+  Trash2, Star, ChevronLeft, LayoutList, X, Scale, ChefHat, MessageSquare, Eye, Pencil,
+  SlidersHorizontal, TrendingUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, ApiError } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
 import { useMe } from '@/hooks/useMe';
+import { useMeasureSystem } from '@/hooks/useMeasureSystem';
+import type { MeasureSystem } from '@/hooks/useMeasureSystem';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -34,6 +37,7 @@ interface CommunityUser {
 interface FollowedUser {
   id: string; name: string | null; handle: string | null;
   image: string | null; isPublic: boolean; followedAt: string;
+  householdId: string | null;
 }
 
 interface CommunityPost {
@@ -41,6 +45,7 @@ interface CommunityPost {
   userId: string; userName: string | null; userHandle: string | null; userImage: string | null;
   recipeId: string | null; recipeTitle: string | null; recipeDescription: string | null;
   recipeImage: string | null; isFollowing: boolean; isOwnPost: boolean;
+  reviewCount: number; recipeAvgRating: number | null; sameHousehold: boolean;
 }
 
 interface RecipeItem {
@@ -63,6 +68,7 @@ interface RecipeDetail {
 interface RecipeReview {
   id: string; rating: number; comment: string | null; updatedAt: string;
   reviewerName: string | null; reviewerHandle: string | null; reviewerImage: string | null;
+  reviewerId: string | null;
 }
 
 interface ProfilePin {
@@ -86,8 +92,6 @@ function initials(name: string | null, fallback: string) {
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
 }
-
-type MeasureSystem = 'metric' | 'imperial';
 
 function round(n: number): string {
   if (Math.abs(n - Math.round(n)) < 0.05) return String(Math.round(n));
@@ -203,12 +207,15 @@ function HalfStarPicker({ value, onChange }: { value: number; onChange: (v: numb
 
 interface ProfileModalTarget {
   userId: string; name: string | null; handle: string | null; image: string | null;
+  sameHousehold: boolean;
 }
 
 function UserProfileModal({ target, meId, open, onClose }: {
   target: ProfileModalTarget | null; meId: string; open: boolean; onClose: () => void;
 }) {
   const queryClient = useQueryClient();
+  const [pinViewTarget, setPinViewTarget] = useState<PinViewTarget | null>(null);
+  const [requestingId, setRequestingId] = useState<string | null>(null);
 
   const { data: profile, isLoading } = useQuery({
     queryKey: queryKeys.users.profile(target?.handle ?? ''),
@@ -216,76 +223,375 @@ function UserProfileModal({ target, meId, open, onClose }: {
     enabled: open && !!target?.handle,
   });
 
-  const requestRecipe = useMutation({
+  const pinRequestMutation = useMutation({
     mutationFn: ({ recipeId, ownerId }: { recipeId: string; ownerId: string }) =>
       api.post('/api/shares/request', { recipeId, ownerId }),
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: queryKeys.shares.sent() }); toast.success('Recipe Requested'); },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.shares.sent() });
+      toast.success('Recipe Requested');
+      setRequestingId(null);
+    },
     onError: (err) => {
-      if (err instanceof ApiError && (err as any).sameHousehold) {
-        toast.info('This person is in your household — you already have access to their recipes.');
-      } else {
-        toast.error(err instanceof ApiError ? err.message : 'Request Failed');
-      }
+      toast.error(err instanceof ApiError ? err.message : 'Request Failed');
+      setRequestingId(null);
     },
   });
 
   if (!target) return null;
   const ini = initials(target.name, target.handle ?? target.userId);
   const isCurrentUser = target.userId === meId;
+  const isHousehold = target.sameHousehold;
   const activePins = (profile?.pins ?? []).filter((p) => p.recipeId !== null);
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="w-[calc(100vw-32px)] max-w-sm sm:max-w-md p-0 gap-0 overflow-hidden flex flex-col max-h-[85vh]">
-        <div className="relative h-16 bg-muted/40 border-b shrink-0">
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2">
-            <div className="rounded-full p-1 bg-background shadow-md ring-4 ring-background">
-              <Avatar className="h-14 w-14">
-                <AvatarImage src={target.image ?? undefined} />
-                <AvatarFallback className="text-xl font-bold">{ini}</AvatarFallback>
-              </Avatar>
-            </div>
-          </div>
-        </div>
-        <div className="scrollbar-hide overflow-y-auto flex-1 pt-10 pb-5 px-5 space-y-4">
-          <div className="text-center space-y-0.5">
-            <p className="font-bold text-base">{target.name ?? 'User'}</p>
-            {target.handle && <p className="text-muted-foreground text-sm">@{target.handle}</p>}
-          </div>
-          {isLoading && <div className="flex justify-center py-4"><div className="h-5 w-5 animate-spin rounded-full border-2 border-primary/30 border-t-transparent" /></div>}
-          {!isLoading && profile?.bio && (
-            <div className="rounded-xl bg-muted/50 border border-border/40 px-3 py-2.5">
-              <p className="text-sm leading-relaxed text-foreground/80">{profile.bio}</p>
-            </div>
-          )}
-          {!isLoading && profile && !profile.bio && <p className="text-center text-xs text-muted-foreground italic">No bio yet.</p>}
-          {!isLoading && activePins.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-sm font-semibold">Pinned Recipes</p>
-              <div className="space-y-2.5">
-                {activePins.map((pin) => (
-                  <div key={pin.position}
-                    className={cn('relative flex items-center gap-3 rounded-xl border bg-card p-2.5',
-                      !isCurrentUser && pin.recipeId && 'cursor-pointer hover:bg-accent/40 transition-colors group')}
-                    onClick={!isCurrentUser && pin.recipeId ? () => requestRecipe.mutate({ recipeId: pin.recipeId!, ownerId: target.userId }) : undefined}>
-                    <span className="absolute -top-2 -left-2 z-10 flex h-[22px] w-[22px] items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-bold shadow-sm leading-none">
-                      {pin.position}
-                    </span>
-                    {pin.recipeImage
-                      ? <img src={pin.recipeImage} alt={pin.recipeTitle ?? ''} className="h-14 w-14 rounded-lg object-cover shrink-0" />
-                      : <div className="h-14 w-14 rounded-lg bg-muted flex items-center justify-center shrink-0"><UtensilsCrossed className="h-5 w-5 text-muted-foreground/40" /></div>}
-                    <div className="min-w-0 flex-1 space-y-0.5">
-                      <p className="text-sm font-semibold truncate">{pin.recipeTitle}</p>
-                      {pin.recipeDescription && <p className="text-xs text-muted-foreground line-clamp-1">{pin.recipeDescription}</p>}
-                      {pin.recipeRating && pin.recipeRating.count > 0 && <StarDisplay rating={pin.recipeRating.avg} count={pin.recipeRating.count} />}
-                    </div>
-                    {!isCurrentUser && <div className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"><Send className="h-4 w-4 text-primary" /></div>}
-                  </div>
-                ))}
+    <>
+      <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+        <DialogContent className="w-[calc(100vw-32px)] max-w-sm sm:max-w-md p-0 gap-0 overflow-hidden flex flex-col max-h-[85vh]">
+          <div className="relative h-16 bg-muted/40 border-b shrink-0">
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2">
+              <div className="rounded-full p-1 bg-background shadow-md ring-4 ring-background">
+                <Avatar className="h-14 w-14">
+                  <AvatarImage src={target.image ?? undefined} />
+                  <AvatarFallback className="text-xl font-bold">{ini}</AvatarFallback>
+                </Avatar>
               </div>
             </div>
+          </div>
+          <div className="scrollbar-hide overflow-y-auto flex-1 pt-10 pb-5 px-5 space-y-4">
+            <div className="text-center space-y-0.5">
+              <p className="font-bold text-base">{target.name ?? 'User'}</p>
+              {target.handle && <p className="text-muted-foreground text-sm">@{target.handle}</p>}
+            </div>
+            {isLoading && <div className="flex justify-center py-4"><div className="h-5 w-5 animate-spin rounded-full border-2 border-primary/30 border-t-transparent" /></div>}
+            {!isLoading && profile?.bio && (
+              <div className="rounded-xl bg-muted/50 border border-border/40 px-3 py-2.5">
+                <p className="text-sm leading-relaxed text-foreground/80">{profile.bio}</p>
+              </div>
+            )}
+            {!isLoading && profile && !profile.bio && <p className="text-center text-xs text-muted-foreground italic">No bio yet.</p>}
+            {!isLoading && activePins.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-semibold">Pinned Recipes</p>
+                <div className="space-y-2.5">
+                  {activePins.map((pin) => (
+                    <div key={pin.position}
+                      className="relative flex items-center gap-3 rounded-xl border bg-card p-2.5">
+                      <span className="absolute -top-2 -left-2 z-10 flex h-[22px] w-[22px] items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-bold shadow-sm leading-none">
+                        {pin.position}
+                      </span>
+                      {pin.recipeImage
+                        ? <img src={pin.recipeImage} alt={pin.recipeTitle ?? ''} className="h-14 w-14 rounded-lg object-cover shrink-0" />
+                        : <div className="h-14 w-14 rounded-lg bg-muted flex items-center justify-center shrink-0"><UtensilsCrossed className="h-5 w-5 text-muted-foreground/40" /></div>}
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <p className="text-sm font-semibold truncate">{pin.recipeTitle}</p>
+                        {pin.recipeDescription && <p className="text-xs text-muted-foreground line-clamp-1">{pin.recipeDescription}</p>}
+                        {pin.recipeRating && pin.recipeRating.count > 0 && <StarDisplay rating={pin.recipeRating.avg} count={pin.recipeRating.count} />}
+                      </div>
+                      {pin.recipeId && target.handle && (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button type="button"
+                            className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
+                            onClick={() => setPinViewTarget({ recipeId: pin.recipeId!, recipeTitle: pin.recipeTitle, recipeDescription: pin.recipeDescription, recipeImage: pin.recipeImage, ownerHandle: target.handle!, ownerId: target.userId, sameHousehold: isHousehold })}>
+                            <Eye className="h-3.5 w-3.5" />
+                          </button>
+                          {!isCurrentUser && !isHousehold && (
+                            <button type="button"
+                              className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
+                              disabled={requestingId === pin.recipeId || pinRequestMutation.isPending}
+                              onClick={() => {
+                                setRequestingId(pin.recipeId!);
+                                pinRequestMutation.mutate({ recipeId: pin.recipeId!, ownerId: target.userId });
+                              }}>
+                              {requestingId === pin.recipeId
+                                ? <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary/30 border-t-transparent" />
+                                : <Send className="h-3.5 w-3.5" />
+                              }
+                            </button>
+                          )}
+                          {!isCurrentUser && isHousehold && (
+                            <span className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground/50 cursor-default" title="Same household">
+                              <Users className="h-3.5 w-3.5" />
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+      <PublicPinViewModal
+        target={pinViewTarget}
+        meId={meId}
+        open={!!pinViewTarget}
+        onClose={() => setPinViewTarget(null)}
+      />
+    </>
+  );
+}
+
+// ─── Public pin view modal ────────────────────────────────────────────────────
+
+interface PinViewTarget {
+  recipeId: string; recipeTitle: string | null; recipeDescription: string | null;
+  recipeImage: string | null; ownerHandle: string; ownerId: string;
+  sameHousehold: boolean;
+}
+
+function PublicPinViewModal({ target, meId, open, onClose }: {
+  target: PinViewTarget | null; meId: string; open: boolean; onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [servings, setServings] = useState<number | null>(null);
+  const [system, setSystem] = useMeasureSystem();
+  const [imgIdx, setImgIdx] = useState(0);
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+  const reviewCommentRef = useRef<HTMLTextAreaElement | undefined>(undefined);
+
+  const { data: detail, isLoading: detailLoading } = useQuery({
+    queryKey: queryKeys.users.pinRecipe(target?.ownerHandle ?? '', target?.recipeId ?? ''),
+    queryFn: () => api.get<RecipeDetail>(`/api/users/${target!.ownerHandle}/recipes/${target!.recipeId}`),
+    enabled: open && !!target,
+  });
+
+  const { data: receivedShares = [] } = useQuery({
+    queryKey: queryKeys.shares.received(),
+    queryFn: () => api.get<{ id: string; recipeId: string | null; status: string }[]>('/api/shares/received'),
+    enabled: open && !!target && target.ownerId !== meId,
+  });
+
+  const myShare = receivedShares.find(
+    (s) => s.recipeId === target?.recipeId && s.status === 'ACCEPTED'
+  );
+
+  const { data: myReview = null } = useQuery({
+    queryKey: queryKeys.shares.review(myShare?.id ?? ''),
+    queryFn: async () => {
+      try { return await api.get<{ id: string; rating: number; comment: string | null }>(`/api/shares/${myShare!.id}/review`); }
+      catch (e) { if (e instanceof ApiError && (e as ApiError).status === 404) return null; throw e; }
+    },
+    enabled: !!myShare,
+  });
+
+  const requestMutation = useMutation({
+    mutationFn: () => api.post('/api/shares/request', { recipeId: target!.recipeId, ownerId: target!.ownerId }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: queryKeys.shares.sent() }); toast.success('Recipe Requested'); },
+    onError: (err) => {
+      if (err instanceof ApiError && (err as any).sameHousehold) {
+        toast.info('This person is in your household — you already share access to their recipes.');
+      } else {
+        toast.error(err instanceof ApiError ? err.message : 'Request Failed');
+      }
+    },
+  });
+
+  const submitReview = useMutation({
+    mutationFn: () =>
+      myReview
+        ? api.patch(`/api/shares/${myShare!.id}/review`, { rating: reviewRating, comment: reviewComment || null })
+        : api.post(`/api/shares/${myShare!.id}/review`, { rating: reviewRating, comment: reviewComment || null }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.shares.review(myShare!.id) });
+      toast.success(myReview ? 'Review Updated' : 'Review Submitted');
+      setShowReviewForm(false);
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Failed'),
+  });
+
+  useEffect(() => {
+    if (open) { setImgIdx(0); setShowReviewForm(false); setReviewRating(0); setReviewComment(''); }
+  }, [open]);
+
+  useEffect(() => {
+    if (detail) setServings(detail.baseServings);
+  }, [detail?.id]);
+
+  useEffect(() => {
+    if (myReview && showReviewForm) { setReviewRating(myReview.rating); setReviewComment(myReview.comment ?? ''); }
+  }, [myReview, showReviewForm]);
+
+  useEffect(() => {
+    if (reviewCommentRef.current) {
+      reviewCommentRef.current.style.height = 'auto';
+      reviewCommentRef.current.style.height = `${reviewCommentRef.current.scrollHeight}px`;
+    }
+  }, [reviewComment]);
+
+  if (!target) return null;
+  const isOwnRecipe = target.ownerId === meId;
+  const isHousehold = target.sameHousehold;
+  const effectiveServings = servings ?? detail?.baseServings ?? 4;
+  const base = detail?.baseServings ?? 1;
+  const images = detail?.images?.length
+    ? [...detail.images].sort((a, b) => a.sortOrder - b.sortOrder)
+    : target.recipeImage ? [{ url: target.recipeImage, sortOrder: 0 }] : [];
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="w-[calc(100vw-24px)] max-w-lg sm:max-w-xl p-0 gap-0 overflow-hidden flex flex-col max-h-[90vh]" hideClose>
+        <DialogClose className="absolute right-3 top-3 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-background/90 border border-border/60 shadow-md text-foreground hover:bg-muted transition-colors backdrop-blur-sm">
+          <X className="h-4 w-4" /><span className="sr-only">Close</span>
+        </DialogClose>
+
+        {images.length > 0 && (
+          <div className="relative shrink-0 bg-muted">
+            <img src={images[imgIdx]?.url} alt={target.recipeTitle ?? ''} className="w-full h-48 object-cover" />
+            {images.length > 1 && (
+              <>
+                <button type="button" onClick={() => setImgIdx((i) => (i - 1 + images.length) % images.length)}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-background/80 border flex items-center justify-center shadow">
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <button type="button" onClick={() => setImgIdx((i) => (i + 1) % images.length)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-background/80 border flex items-center justify-center shadow">
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+                  {images.map((_, i) => (
+                    <button key={i} type="button" onClick={() => setImgIdx(i)}
+                      className={cn('h-1.5 rounded-full transition-all', i === imgIdx ? 'w-4 bg-primary' : 'w-1.5 bg-primary/30')} />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {detail && (
+          <div className="shrink-0 px-4 pt-4 pb-3 border-b space-y-2.5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-bold leading-tight">{detail.title}</h2>
+                {detail.categoryName && <p className="text-xs text-muted-foreground mt-0.5">{detail.categoryName}</p>}
+              </div>
+              <button type="button" onClick={() => setSystem((s) => s === 'metric' ? 'imperial' : 'metric')}
+                className="flex items-center gap-1.5 text-[11px] font-medium rounded-full border px-2.5 py-1 transition-colors shrink-0 hover:bg-accent">
+                <Scale className="h-3 w-3" />{system === 'metric' ? 'Metric' : 'Imperial'}
+              </button>
+            </div>
+            {detail.description && <p className="text-sm text-foreground/80 leading-relaxed">{detail.description}</p>}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                  <ChefHat className="h-3.5 w-3.5" />Servings
+                </span>
+                <span className="text-sm font-bold text-primary">{effectiveServings}</span>
+              </div>
+              <Slider min={1} max={20} step={1} value={[effectiveServings]} onValueChange={([v]) => setServings(v)} className="w-full" />
+              <div className="flex justify-between text-[10px] text-muted-foreground/50"><span>1</span><span>20</span></div>
+            </div>
+          </div>
+        )}
+
+        <div className="scrollbar-hide overflow-y-auto flex-1 px-4 py-4 space-y-5">
+          {detailLoading && <div className="flex justify-center py-8"><div className="h-5 w-5 animate-spin rounded-full border-2 border-primary/30 border-t-transparent" /></div>}
+
+          {detail && (
+            <>
+              {detail.ingredients.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ingredients</p>
+                  <div className="space-y-2">
+                    {detail.ingredients.map((ing) => {
+                      const scaledQty = scaleQty(ing.quantity, base, effectiveServings);
+                      const converted = convertQty(scaledQty, ing.unit, system);
+                      return (
+                        <div key={ing.id} className="flex gap-2.5 items-start text-sm">
+                          <ChefHat className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0 opacity-70" />
+                          <span>
+                            {converted.qty && <span className="font-medium">{converted.qty}{converted.unit ? ` ${converted.unit}` : ''} </span>}
+                            {ing.name}
+                            {ing.note && <span className="text-muted-foreground"> ({ing.note})</span>}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {detail.steps.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Method</p>
+                  <div className="space-y-3">
+                    {detail.steps.map((step, i) => (
+                      <div key={i} className="flex gap-3 text-sm">
+                        <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-bold leading-none mt-0.5">{i + 1}</span>
+                        <p className="leading-relaxed flex-1">{convertStepText(step, system)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {showReviewForm && !isOwnRecipe && (
+                <div className="rounded-xl border bg-muted/30 px-3 py-3 space-y-3">
+                  <p className="text-xs font-medium">{myReview ? 'Edit Your Review' : 'Leave A Review'}</p>
+                  {myShare ? (
+                    <>
+                      <HalfStarPicker value={reviewRating} onChange={setReviewRating} />
+                      <div className="relative">
+                        <textarea
+                          ref={(el) => { reviewCommentRef.current = el ?? undefined; }}
+                          placeholder="Share your thoughts…"
+                          className="w-full resize-none overflow-hidden text-sm min-h-[72px] pb-5 rounded-md border bg-background px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring"
+                          value={reviewComment}
+                          onChange={(e) => setReviewComment(e.target.value.slice(0, REVIEW_CHAR_LIMIT))}
+                        />
+                        <span className={`absolute bottom-1.5 right-2 text-[10px] pointer-events-none ${reviewComment.length >= REVIEW_CHAR_LIMIT ? 'text-destructive' : 'text-muted-foreground/60'}`}>
+                          {reviewComment.length}/{REVIEW_CHAR_LIMIT}
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" className="flex-1 h-8"
+                          onClick={() => setShowReviewForm(false)}>Cancel</Button>
+                        <Button size="sm" className="flex-1 h-8"
+                          disabled={reviewRating === 0 || submitReview.isPending}
+                          onClick={() => submitReview.mutate()}>
+                          {submitReview.isPending ? 'Saving…' : myReview ? 'Update' : 'Submit'}
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground text-center py-1">Request this recipe first to leave a review.</p>
+                      <Button variant="outline" size="sm" className="w-full h-8" onClick={() => setShowReviewForm(false)}>Close</Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
+
+        {!isOwnRecipe && !isHousehold && (
+          <div className="shrink-0 border-t bg-background px-3 py-2.5 flex gap-2">
+            <Button variant="outline" size="sm" className="flex-1 h-8 text-xs gap-1.5"
+              disabled={requestMutation.isPending}
+              onClick={() => requestMutation.mutate()}>
+              <Send className="h-3.5 w-3.5" />Request Recipe
+            </Button>
+            <Button size="sm" variant={showReviewForm ? 'default' : 'outline'}
+              className="flex-1 h-8 text-xs gap-1.5"
+              onClick={() => {
+                if (!showReviewForm && myReview) { setReviewRating(myReview.rating); setReviewComment(myReview.comment ?? ''); }
+                setShowReviewForm((v) => !v);
+              }}>
+              <MessageSquare className="h-3.5 w-3.5" />{myReview ? 'Edit Review' : 'Rate & Review'}
+            </Button>
+          </div>
+        )}
+        {!isOwnRecipe && isHousehold && (
+          <div className="shrink-0 border-t bg-background px-3 py-2 flex items-center gap-2">
+            <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <p className="text-xs text-muted-foreground">This recipe is in your household's book.</p>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -295,8 +601,113 @@ function UserProfileModal({ target, meId, open, onClose }: {
 
 const REVIEWS_PREVIEW = 3;
 
-function ReviewsSection({ reviews }: { reviews: RecipeReview[] }) {
+function ReviewExpandModal({ review, meId, myShareId, postId, open, onClose }: {
+  review: RecipeReview | null; meId: string; myShareId: string | null;
+  postId: string; open: boolean; onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState('');
+  const commentRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (review) { setRating(review.rating); setComment(review.comment ?? ''); }
+    setEditing(false);
+  }, [review?.id]);
+
+  useEffect(() => {
+    if (commentRef.current) {
+      commentRef.current.style.height = 'auto';
+      commentRef.current.style.height = `${commentRef.current.scrollHeight}px`;
+    }
+  }, [comment, editing]);
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      api.patch(`/api/shares/${myShareId!}/review`, { rating, comment: comment.trim() || null }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.community.postReviews(postId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.shares.review(myShareId ?? '') });
+      toast.success('Review Updated');
+      setEditing(false);
+      onClose();
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Failed'),
+  });
+
+  if (!review) return null;
+  const isOwn = review.reviewerId === meId;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="w-[calc(100vw-32px)] max-w-sm sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-sm font-semibold">Review</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Avatar className="h-8 w-8">
+              <AvatarImage src={review.reviewerImage ?? undefined} />
+              <AvatarFallback className="text-xs">{initials(review.reviewerName, review.reviewerHandle ?? '?')}</AvatarFallback>
+            </Avatar>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">{review.reviewerName ?? review.reviewerHandle ?? 'User'}</p>
+              <p className="text-[10px] text-muted-foreground">{formatDate(review.updatedAt)}</p>
+            </div>
+            <StarDisplay rating={review.rating} />
+          </div>
+
+          {!editing ? (
+            <>
+              {review.comment
+                ? <p className="text-sm text-foreground/80 leading-relaxed break-words">{review.comment}</p>
+                : <p className="text-xs text-muted-foreground italic">No written comment.</p>}
+              {isOwn && myShareId && (
+                <div className="flex justify-end pt-1">
+                  <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setEditing(true)}>
+                    <Pencil className="h-3.5 w-3.5" />Edit Review
+                  </Button>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="space-y-2">
+              <HalfStarPicker value={rating} onChange={setRating} />
+              <div className="relative">
+                <Textarea
+                  ref={commentRef}
+                  placeholder="Update your comment…"
+                  className="resize-none overflow-hidden text-sm min-h-[80px] pb-5"
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value.slice(0, REVIEW_CHAR_LIMIT))}
+                />
+                <span className="absolute bottom-1.5 right-2 text-[10px] text-muted-foreground/60 pointer-events-none">
+                  {comment.length}/{REVIEW_CHAR_LIMIT}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" className="flex-1 h-8"
+                  onClick={() => setEditing(false)}>Cancel</Button>
+                <Button size="sm" className="flex-1 h-8"
+                  disabled={rating === 0 || saveMutation.isPending}
+                  onClick={() => saveMutation.mutate()}>
+                  {saveMutation.isPending ? 'Saving…' : 'Save'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ReviewsSection({ reviews, meId, myShareId, postId }: {
+  reviews: RecipeReview[]; meId: string; myShareId: string | null; postId: string;
+}) {
   const [expanded, setExpanded] = useState(false);
+  const [expandedReview, setExpandedReview] = useState<RecipeReview | null>(null);
   const visible = expanded ? reviews : reviews.slice(0, REVIEWS_PREVIEW);
 
   return (
@@ -316,9 +727,9 @@ function ReviewsSection({ reviews }: { reviews: RecipeReview[] }) {
         : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {visible.map((r) => (
-              <div key={r.id} className="rounded-xl border bg-card px-3 py-3 space-y-1.5">
+              <div key={r.id} className="rounded-xl border bg-card px-3 py-3 flex flex-col gap-1.5 overflow-hidden">
                 <div className="flex items-center gap-2">
-                  <Avatar className="h-7 w-7">
+                  <Avatar className="h-7 w-7 shrink-0">
                     <AvatarImage src={r.reviewerImage ?? undefined} />
                     <AvatarFallback className="text-[10px]">{initials(r.reviewerName, r.reviewerHandle ?? '?')}</AvatarFallback>
                   </Avatar>
@@ -327,8 +738,16 @@ function ReviewsSection({ reviews }: { reviews: RecipeReview[] }) {
                   </div>
                   <StarDisplay rating={r.rating} />
                 </div>
-                {r.comment && <p className="text-sm text-foreground/80 leading-relaxed">{r.comment}</p>}
-                <p className="text-[10px] text-muted-foreground/50">{formatDate(r.updatedAt)}</p>
+                {r.comment && (
+                  <p className="text-sm text-foreground/80 leading-relaxed line-clamp-3 break-words overflow-hidden flex-1">{r.comment}</p>
+                )}
+                <div className="flex items-center justify-between pt-0.5">
+                  <p className="text-[10px] text-muted-foreground/50">{formatDate(r.updatedAt)}</p>
+                  <button type="button" onClick={() => setExpandedReview(r)}
+                    className="text-[11px] text-primary hover:text-primary/80 font-medium transition-colors">
+                    View
+                  </button>
+                </div>
               </div>
             ))}
             {!expanded && reviews.length > REVIEWS_PREVIEW && (
@@ -339,6 +758,15 @@ function ReviewsSection({ reviews }: { reviews: RecipeReview[] }) {
             )}
           </div>
         )}
+
+      <ReviewExpandModal
+        review={expandedReview}
+        meId={meId}
+        myShareId={myShareId}
+        postId={postId}
+        open={!!expandedReview}
+        onClose={() => setExpandedReview(null)}
+      />
     </div>
   );
 }
@@ -350,7 +778,7 @@ const REVIEW_CHAR_LIMIT = 500;
 function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null; meId: string; onClose: () => void }) {
   const queryClient = useQueryClient();
   const [servings, setServings] = useState<number | null>(null);
-  const [system, setSystem] = useState<MeasureSystem>('metric');
+  const [system, setSystem] = useMeasureSystem();
   const [imageIdx, setImageIdx] = useState(0);
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
@@ -396,7 +824,7 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
   const { data: myReview = null } = useQuery({
     queryKey: queryKeys.shares.review(myShare?.id ?? ''),
     queryFn: async () => {
-      try { return await api.get<{ rating: number; comment: string | null }>(`/api/shares/${myShare!.id}/review`); }
+      try { return await api.get<{ id: string; rating: number; comment: string | null }>(`/api/shares/${myShare!.id}/review`); }
       catch (e) { if (e instanceof ApiError && (e as ApiError).status === 404) return null; throw e; }
     },
     enabled: !!myShare,
@@ -435,7 +863,7 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: queryKeys.shares.sent() }); toast.success('Recipe Requested'); },
     onError: (err) => {
       if (err instanceof ApiError && (err as any).sameHousehold) {
-        toast.info('This person is in your household — you already have access to their recipes.');
+        toast.info('This person is in your household — you already share access to their recipes.');
       } else {
         toast.error(err instanceof ApiError ? err.message : 'Request Failed');
       }
@@ -559,7 +987,12 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
               )}
 
               {/* Reviews */}
-              <ReviewsSection reviews={reviews} />
+              <ReviewsSection
+                reviews={reviews}
+                meId={meId}
+                myShareId={myShare?.id ?? null}
+                postId={post.id}
+              />
 
               {/* Rate & review form — toggled from bottom bar */}
               {showReviewForm && !post.isOwnPost && (
@@ -581,14 +1014,21 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
                           {reviewComment.length}/{REVIEW_CHAR_LIMIT}
                         </span>
                       </div>
-                      <Button size="sm" className="w-full"
-                        disabled={reviewRating === 0 || submitReview.isPending}
-                        onClick={() => submitReview.mutate()}>
-                        {submitReview.isPending ? 'Saving…' : myReview ? 'Update Review' : 'Submit Review'}
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" className="flex-1 h-8"
+                          onClick={() => setShowReviewForm(false)}>Cancel</Button>
+                        <Button size="sm" className="flex-1 h-8"
+                          disabled={reviewRating === 0 || submitReview.isPending}
+                          onClick={() => submitReview.mutate()}>
+                          {submitReview.isPending ? 'Saving…' : myReview ? 'Update Review' : 'Submit Review'}
+                        </Button>
+                      </div>
                     </>
                   ) : (
-                    <p className="text-xs text-muted-foreground text-center py-1">Request this recipe first to leave a review.</p>
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground text-center py-1">Request this recipe first to leave a review.</p>
+                      <Button variant="outline" size="sm" className="w-full h-8" onClick={() => setShowReviewForm(false)}>Close</Button>
+                    </div>
                   )}
                 </div>
               )}
@@ -597,7 +1037,7 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
         </div>
 
         {/* Sticky bottom action bar */}
-        {!post.isOwnPost && post.recipeId && (
+        {!post.isOwnPost && post.recipeId && !post.sameHousehold && (
           <div className="shrink-0 border-t bg-background px-3 py-2.5 flex gap-2">
             <Button variant="outline" size="sm" className="flex-1 h-8 text-xs gap-1.5"
               disabled={requestMutation.isPending}
@@ -617,6 +1057,12 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
             </Button>
           </div>
         )}
+        {!post.isOwnPost && post.recipeId && post.sameHousehold && (
+          <div className="shrink-0 border-t bg-background px-3 py-2 flex items-center gap-2">
+            <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <p className="text-xs text-muted-foreground">This recipe is in your household's book.</p>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -627,16 +1073,25 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
 function CreatePostModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const queryClient = useQueryClient();
   const [selectedRecipe, setSelectedRecipe] = useState<RecipeItem | null>(null);
+  const [previewRecipe, setPreviewRecipe] = useState<RecipeItem | null>(null);
   const [comment, setComment] = useState('');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [step, setStep] = useState<'recipe' | 'comment'>('recipe');
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const [step, setStep] = useState<'recipe' | 'preview' | 'comment'>('recipe');
+  const [previewServings, setPreviewServings] = useState(4);
+  const [previewSystem, setPreviewSystem] = useMeasureSystem();
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const { data: recipes = [], isLoading: recipesLoading } = useQuery({
     queryKey: queryKeys.recipeBook.recipes(debouncedSearch),
     queryFn: () => api.get<RecipeItem[]>(`/api/recipe-book/recipes?search=${encodeURIComponent(debouncedSearch)}`),
     enabled: open && debouncedSearch.length >= 1,
+  });
+
+  const { data: previewDetail, isLoading: previewLoading } = useQuery({
+    queryKey: ['recipe-book', 'recipe', previewRecipe?.id ?? ''],
+    queryFn: () => api.get<RecipeDetail>(`/api/recipe-book/recipes/${previewRecipe!.id}`),
+    enabled: step === 'preview' && !!previewRecipe,
   });
 
   const createPost = useMutation({
@@ -651,7 +1106,7 @@ function CreatePostModal({ open, onClose }: { open: boolean; onClose: () => void
   });
 
   const handleClose = () => {
-    setSelectedRecipe(null); setComment(''); setSearch('');
+    setSelectedRecipe(null); setPreviewRecipe(null); setComment(''); setSearch('');
     setDebouncedSearch(''); setStep('recipe'); onClose();
   };
 
@@ -661,12 +1116,25 @@ function CreatePostModal({ open, onClose }: { open: boolean; onClose: () => void
     timerRef.current = setTimeout(() => setDebouncedSearch(val.trim()), 350);
   };
 
+  const selectPreviewedRecipe = () => {
+    if (!previewRecipe) return;
+    setSelectedRecipe(previewRecipe);
+    setStep('comment');
+  };
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent className="w-[calc(100vw-48px)] max-w-lg mx-auto">
-        <DialogHeader>
-          <DialogTitle>{step === 'recipe' ? 'Select A Recipe' : 'Write Your Post'}</DialogTitle>
-        </DialogHeader>
+      <DialogContent className={cn(
+        'w-[calc(100vw-48px)] mx-auto',
+        step === 'preview'
+          ? 'max-w-lg p-0 gap-0 overflow-hidden flex flex-col max-h-[85vh]'
+          : 'max-w-lg'
+      )}>
+        {step !== 'preview' && (
+          <DialogHeader>
+            <DialogTitle>{step === 'recipe' ? 'Select A Recipe' : 'Write Your Post'}</DialogTitle>
+          </DialogHeader>
+        )}
 
         {step === 'recipe' && (
           <div className="space-y-4">
@@ -681,7 +1149,7 @@ function CreatePostModal({ open, onClose }: { open: boolean; onClose: () => void
               {debouncedSearch.length >= 1 && !recipesLoading && recipes.length === 0 && <p className="text-xs text-muted-foreground py-4 text-center">No recipes match that search.</p>}
               {debouncedSearch.length >= 1 && recipes.map((r) => (
                 <button key={r.id} type="button"
-                  onClick={() => { setSelectedRecipe(r); setStep('comment'); }}
+                  onClick={() => { setPreviewRecipe(r); setPreviewServings(4); setStep('preview'); }}
                   className="w-full text-left rounded-lg border px-2.5 py-2 hover:bg-accent transition-colors flex items-center gap-2.5">
                   {r.image
                     ? <img src={r.image} alt={r.title} className="h-9 w-9 rounded-md object-cover shrink-0" />
@@ -690,11 +1158,88 @@ function CreatePostModal({ open, onClose }: { open: boolean; onClose: () => void
                     <p className="text-xs font-medium truncate leading-tight">{r.title}</p>
                     {r.description && <p className="text-[10px] text-muted-foreground truncate mt-0.5 leading-tight">{r.description}</p>}
                   </div>
-                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <Eye className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 </button>
               ))}
             </div>
           </div>
+        )}
+
+        {step === 'preview' && previewRecipe && (
+          <>
+            {previewRecipe.image && (
+              <div className="shrink-0 bg-muted">
+                <img src={previewRecipe.image} alt={previewRecipe.title} className="w-full h-40 object-cover" />
+              </div>
+            )}
+            <div className="scrollbar-hide overflow-y-auto flex-1 px-4 py-4 space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-base font-bold leading-tight">{previewDetail?.title ?? previewRecipe.title}</h2>
+                  {previewDetail?.categoryName && <p className="text-xs text-muted-foreground mt-0.5">{previewDetail.categoryName}</p>}
+                </div>
+                <button type="button" onClick={() => setPreviewSystem(previewSystem === 'metric' ? 'imperial' : 'metric')}
+                  className="flex items-center gap-1.5 text-[11px] font-medium rounded-full border px-2.5 py-1 transition-colors shrink-0 hover:bg-accent">
+                  <Scale className="h-3 w-3" />{previewSystem === 'metric' ? 'Metric' : 'Imperial'}
+                </button>
+              </div>
+              {(previewDetail?.description ?? previewRecipe.description) && (
+                <p className="text-sm text-foreground/80 leading-relaxed">{previewDetail?.description ?? previewRecipe.description}</p>
+              )}
+              {previewLoading && <div className="flex justify-center py-6"><div className="h-5 w-5 animate-spin rounded-full border-2 border-primary/30 border-t-transparent" /></div>}
+              {previewDetail && (
+                <>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5"><ChefHat className="h-3.5 w-3.5" />Servings</span>
+                      <span className="text-sm font-bold text-primary">{previewServings}</span>
+                    </div>
+                    <Slider min={1} max={20} step={1} value={[previewServings]} onValueChange={([v]) => setPreviewServings(v)} className="w-full" />
+                  </div>
+                  {previewDetail.ingredients.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ingredients</p>
+                      <div className="space-y-2">
+                        {previewDetail.ingredients.map((ing) => {
+                          const scaledQty = scaleQty(ing.quantity, previewDetail.baseServings, previewServings);
+                          const converted = convertQty(scaledQty, ing.unit, previewSystem);
+                          return (
+                            <div key={ing.id} className="flex gap-2.5 items-start text-sm">
+                              <ChefHat className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0 opacity-70" />
+                              <span>
+                                {converted.qty && <span className="font-medium">{converted.qty}{converted.unit ? ` ${converted.unit}` : ''} </span>}
+                                {ing.name}
+                                {ing.note && <span className="text-muted-foreground"> ({ing.note})</span>}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {previewDetail.steps.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Method</p>
+                      <div className="space-y-3">
+                        {previewDetail.steps.map((step, i) => (
+                          <div key={i} className="flex gap-3 text-sm">
+                            <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-bold leading-none mt-0.5">{i + 1}</span>
+                            <p className="leading-relaxed flex-1">{convertStepText(step, previewSystem)}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="shrink-0 border-t bg-background px-3 py-2.5 flex gap-2">
+              <Button variant="outline" size="sm" className="flex-1 h-8 text-xs" onClick={() => setStep('recipe')}>Back</Button>
+              <Button size="sm" className="flex-1 h-8 text-xs gap-1.5" onClick={selectPreviewedRecipe}>
+                Select This Recipe
+              </Button>
+            </div>
+          </>
         )}
 
         {step === 'comment' && selectedRecipe && (
@@ -742,7 +1287,7 @@ function CommunityPage() {
 
   return (
     <div className="flex flex-col items-center px-4 pb-24 pt-6">
-      <div className="w-full max-w-md sm:max-w-xl lg:w-[65%] lg:max-w-none">
+      <div className="w-full max-w-md sm:max-w-xl lg:w-[65%] lg:max-w-5xl xl:max-w-[1400px]">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <div className="rounded-t-2xl border border-b-0 overflow-hidden">
             <TabsList className="w-full h-12 rounded-none bg-card border-b p-0 gap-0">
@@ -752,7 +1297,7 @@ function CommunityPage() {
                 { value: 'following', label: 'Following' },
               ].map(({ value, label }) => (
                 <TabsTrigger key={value} value={value}
-                  className="flex-1 h-full rounded-none text-[10px] font-medium data-[state=active]:bg-background data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=inactive]:text-muted-foreground px-0.5">
+                  className="flex-1 h-full rounded-none text-[10px] sm:text-xs lg:text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=inactive]:text-muted-foreground px-0.5">
                   {label}
                 </TabsTrigger>
               ))}
@@ -778,43 +1323,107 @@ function CommunityPage() {
 
 // ─── Feed Tab ─────────────────────────────────────────────────────────────────
 
-type SinceFilter = '24h' | '1w' | '1m' | 'all';
-const PAGE_SIZE = 5;
+type TimeMode = 'all' | 'year' | 'month' | 'day';
+type SortBy = 'recent' | 'oldest' | 'top-rated' | 'most-reviewed' | 'unreviewed' | 'az';
+type PostType = 'all' | 'with-recipe' | 'no-recipe';
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const LAUNCH_YEAR = 2024;
+
+function usePageSize() {
+  const getSize = () => {
+    if (typeof window === 'undefined') return 8;
+    const w = window.innerWidth;
+    if (w >= 1536) return 16;
+    if (w >= 1280) return 12;
+    if (w >= 1024) return 9;
+    if (w >= 768) return 6;
+    return 4;
+  };
+  const [size, setSize] = useState(getSize);
+  useEffect(() => {
+    const handler = () => setSize(getSize());
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+  return size;
+}
 
 function FeedTab({ meId, filterUserId, filterUserName, onClearFilter }: {
   meId: string; filterUserId: string | null; filterUserName: string | null; onClearFilter: () => void;
 }) {
   const queryClient = useQueryClient();
+  const pageSize = usePageSize();
   const [createOpen, setCreateOpen] = useState(false);
   const [recipeModalPost, setRecipeModalPost] = useState<CommunityPost | null>(null);
   const [profileTarget, setProfileTarget] = useState<ProfileModalTarget | null>(null);
-  const [since, setSince] = useState<SinceFilter>('all');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [page, setPage] = useState(0);
   const [feedSearch, setFeedSearch] = useState('');
 
-  // Reset page on filter change
-  useEffect(() => { setPage(0); }, [filterUserId, since, feedSearch]);
+  const now = new Date();
+  const [timeMode, setTimeMode] = useState<TimeMode>('all');
+  const [selYear, setSelYear] = useState(now.getFullYear());
+  const [selMonth, setSelMonth] = useState(now.getMonth() + 1);
+  const [selDay, setSelDay] = useState(now.getDate());
+  const [sortBy, setSortBy] = useState<SortBy>('recent');
+  const [postType, setPostType] = useState<PostType>('all');
+  const [minRating, setMinRating] = useState<0 | 3 | 4 | 5>(0);
+
+  const hasActiveFilters = timeMode !== 'all' || sortBy !== 'recent' || postType !== 'all' || minRating > 0;
+  const clearFilters = () => { setTimeMode('all'); setSortBy('recent'); setPostType('all'); setMinRating(0); };
+
+  const currentYear = now.getFullYear();
+  const years = useMemo(() => Array.from({ length: currentYear - LAUNCH_YEAR + 1 }, (_, i) => currentYear - i), [currentYear]);
+  const daysInMonth = new Date(selYear, selMonth, 0).getDate();
+
+  const { apiFrom, apiTo } = useMemo(() => {
+    if (timeMode === 'all') return { apiFrom: undefined, apiTo: undefined };
+    const mm = String(selMonth).padStart(2, '0');
+    const last = String(new Date(selYear, selMonth, 0).getDate()).padStart(2, '0');
+    if (timeMode === 'year') return { apiFrom: `${selYear}-01-01T00:00:00Z`, apiTo: `${selYear}-12-31T23:59:59Z` };
+    if (timeMode === 'month') return { apiFrom: `${selYear}-${mm}-01T00:00:00Z`, apiTo: `${selYear}-${mm}-${last}T23:59:59Z` };
+    const dd = String(selDay).padStart(2, '0');
+    return { apiFrom: `${selYear}-${mm}-${dd}T00:00:00Z`, apiTo: `${selYear}-${mm}-${dd}T23:59:59Z` };
+  }, [timeMode, selYear, selMonth, selDay]);
+
+  useEffect(() => { setPage(0); }, [filterUserId, apiFrom, apiTo, sortBy, postType, minRating, feedSearch]);
 
   const { data: posts = [], isLoading } = useQuery({
-    queryKey: queryKeys.community.posts(filterUserId ?? undefined, since),
+    queryKey: queryKeys.community.posts(filterUserId ?? undefined, apiFrom, apiTo),
     queryFn: () => {
       const params = new URLSearchParams();
       if (filterUserId) params.set('userId', filterUserId);
-      if (since !== 'all') params.set('since', since);
+      if (apiFrom) params.set('from', apiFrom);
+      if (apiTo) params.set('to', apiTo);
       return api.get<CommunityPost[]>(`/api/community/posts?${params.toString()}`);
     },
   });
 
-  const filteredPosts = feedSearch.trim()
-    ? posts.filter((p) => {
-        const q = feedSearch.toLowerCase();
-        return p.userName?.toLowerCase().includes(q) || p.userHandle?.toLowerCase().includes(q);
-      })
-    : posts;
+  const filteredPosts = useMemo(() => {
+    let result = feedSearch.trim()
+      ? posts.filter((p) => { const q = feedSearch.toLowerCase(); return p.userName?.toLowerCase().includes(q) || p.userHandle?.toLowerCase().includes(q); })
+      : posts;
 
-  const totalPages = Math.ceil(filteredPosts.length / PAGE_SIZE);
+    if (postType === 'with-recipe') result = result.filter((p) => p.recipeId !== null);
+    else if (postType === 'no-recipe') result = result.filter((p) => p.recipeId === null);
+
+    if (minRating > 0) result = result.filter((p) => p.recipeAvgRating !== null && p.recipeAvgRating >= minRating);
+
+    if (sortBy === 'unreviewed') result = result.filter((p) => p.recipeId !== null && p.reviewCount === 0);
+
+    switch (sortBy) {
+      case 'oldest': return [...result].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      case 'top-rated': return [...result].sort((a, b) => (b.recipeAvgRating ?? 0) - (a.recipeAvgRating ?? 0));
+      case 'most-reviewed': return [...result].sort((a, b) => b.reviewCount - a.reviewCount);
+      case 'az': return [...result].sort((a, b) => (a.recipeTitle ?? '').localeCompare(b.recipeTitle ?? ''));
+      default: return result;
+    }
+  }, [posts, feedSearch, postType, minRating, sortBy]);
+
+  const totalPages = Math.ceil(filteredPosts.length / pageSize);
   const clampedPage = Math.min(page, Math.max(0, totalPages - 1));
-  const paginated = filteredPosts.slice(clampedPage * PAGE_SIZE, (clampedPage + 1) * PAGE_SIZE);
+  const paginated = filteredPosts.slice(clampedPage * pageSize, (clampedPage + 1) * pageSize);
 
   const followMutation = useMutation({
     mutationFn: (userId: string) => api.post('/api/follows', { followingId: userId }),
@@ -839,19 +1448,12 @@ function FeedTab({ meId, filterUserId, filterUserName, onClearFilter }: {
     onSuccess: () => toast.success('Recipe Requested'),
     onError: (err) => {
       if (err instanceof ApiError && (err as any).sameHousehold) {
-        toast.info('This person is in your household — you already have access to their recipes.');
+        toast.info('This person is in your household — you already share access to their recipes.');
       } else {
         toast.error(err instanceof ApiError ? err.message : 'Failed');
       }
     },
   });
-
-  const sinceLabels: { value: SinceFilter; label: string }[] = [
-    { value: '24h', label: 'Last 24h' },
-    { value: '1w', label: 'This Week' },
-    { value: '1m', label: 'This Month' },
-    { value: 'all', label: 'All Time' },
-  ];
 
   return (
     <div className="p-4 space-y-3">
@@ -887,16 +1489,130 @@ function FeedTab({ meId, filterUserId, filterUserName, onClearFilter }: {
         </div>
       )}
 
-      <div className="flex gap-1.5 overflow-x-auto scrollbar-hide pb-0.5">
-        {sinceLabels.map(({ value, label }) => (
-          <button key={value} type="button" onClick={() => setSince(value)}
-            className={cn('shrink-0 text-[11px] font-medium rounded-full border px-2.5 py-1 transition-colors',
-              since === value
-                ? 'bg-primary text-primary-foreground border-primary'
-                : 'border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/30')}>
-            {label}
-          </button>
-        ))}
+      {/* Collapsible filters */}
+      <div className="rounded-xl border border-border/60 bg-card/50 overflow-hidden">
+        <button type="button"
+          onClick={() => setFiltersOpen((v) => !v)}
+          className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-accent/30 transition-colors">
+          <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <span className="text-xs font-medium flex-1">Filters</span>
+          {hasActiveFilters && <span className="h-2 w-2 rounded-full bg-primary shrink-0" />}
+          <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 shrink-0', filtersOpen && 'rotate-180')} />
+        </button>
+
+        {filtersOpen && (
+          <div className="border-t border-border/40 px-3 py-3 space-y-4">
+
+            {/* TIME PERIOD */}
+            <div className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Time Period</p>
+              <div className="flex flex-wrap gap-1.5">
+                {([
+                  { value: 'all', label: 'All Time' },
+                  { value: 'year', label: 'Year' },
+                  { value: 'month', label: 'Month' },
+                  { value: 'day', label: 'Day' },
+                ] as { value: TimeMode; label: string }[]).map(({ value, label }) => (
+                  <button key={value} type="button" onClick={() => setTimeMode(value)}
+                    className={cn('text-[11px] font-medium rounded-full border px-2.5 py-1 transition-colors',
+                      timeMode === value ? 'bg-primary text-primary-foreground border-primary' : 'border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/30')}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {timeMode !== 'all' && (
+                <div className="flex flex-wrap gap-2 pt-0.5">
+                  <select value={selYear} onChange={(e) => setSelYear(Number(e.target.value))}
+                    className="text-xs rounded-lg border border-border/60 bg-background px-2 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
+                    {years.map((y) => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                  {(timeMode === 'month' || timeMode === 'day') && (
+                    <select value={selMonth} onChange={(e) => setSelMonth(Number(e.target.value))}
+                      className="text-xs rounded-lg border border-border/60 bg-background px-2 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
+                      {MONTH_NAMES.map((name, i) => <option key={i + 1} value={i + 1}>{name}</option>)}
+                    </select>
+                  )}
+                  {timeMode === 'day' && (
+                    <select value={selDay} onChange={(e) => setSelDay(Number(e.target.value))}
+                      className="text-xs rounded-lg border border-border/60 bg-background px-2 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
+                      {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* SORT BY */}
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Sort By</p>
+              <div className="flex flex-wrap gap-1.5">
+                {([
+                  { value: 'recent', label: 'Newest First' },
+                  { value: 'oldest', label: 'Oldest First' },
+                  { value: 'top-rated', label: 'Top Rated', icon: TrendingUp },
+                  { value: 'most-reviewed', label: 'Most Reviewed', icon: MessageSquare },
+                  { value: 'unreviewed', label: 'No Reviews Yet' },
+                  { value: 'az', label: 'A–Z by Recipe' },
+                ] as { value: SortBy; label: string; icon?: React.ComponentType<{ className?: string }> }[]).map(({ value, label, icon: Icon }) => (
+                  <button key={value} type="button" onClick={() => setSortBy(value)}
+                    className={cn('flex items-center gap-1 text-[11px] font-medium rounded-full border px-2.5 py-1 transition-colors',
+                      sortBy === value ? 'bg-primary text-primary-foreground border-primary' : 'border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/30')}>
+                    {Icon && <Icon className="h-3 w-3" />}
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* CONTENT */}
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Content</p>
+              <div className="flex flex-wrap gap-1.5">
+                {([
+                  { value: 'all', label: 'All Posts' },
+                  { value: 'with-recipe', label: 'Has Recipe' },
+                  { value: 'no-recipe', label: 'No Recipe' },
+                ] as { value: PostType; label: string }[]).map(({ value, label }) => (
+                  <button key={value} type="button" onClick={() => setPostType(value)}
+                    className={cn('text-[11px] font-medium rounded-full border px-2.5 py-1 transition-colors',
+                      postType === value ? 'bg-primary text-primary-foreground border-primary' : 'border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/30')}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* MIN RATING — only relevant when recipes are shown */}
+            {postType !== 'no-recipe' && (
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Min Rating</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {([
+                    { value: 0, label: 'Any' },
+                    { value: 3, label: '3★+' },
+                    { value: 4, label: '4★+' },
+                    { value: 5, label: '5★ Only' },
+                  ] as { value: 0 | 3 | 4 | 5; label: string }[]).map(({ value, label }) => (
+                    <button key={value} type="button" onClick={() => setMinRating(value)}
+                      className={cn('text-[11px] font-medium rounded-full border px-2.5 py-1 transition-colors',
+                        minRating === value ? 'bg-primary text-primary-foreground border-primary' : 'border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/30')}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {hasActiveFilters && (
+              <button type="button" onClick={clearFilters}
+                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2">
+                Clear all filters
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {isLoading && <div className="flex justify-center py-10"><div className="h-6 w-6 animate-spin rounded-full border-2 border-primary/30 border-t-transparent" /></div>}
@@ -918,7 +1634,7 @@ function FeedTab({ meId, filterUserId, filterUserName, onClearFilter }: {
             onDelete={() => deletePost.mutate(post.id)}
             onViewRecipe={() => setRecipeModalPost(post)}
             onRequestRecipe={() => requestShare.mutate({ recipeId: post.recipeId!, ownerId: post.userId })}
-            onViewProfile={() => setProfileTarget({ userId: post.userId, name: post.userName, handle: post.userHandle, image: post.userImage })}
+            onViewProfile={() => setProfileTarget({ userId: post.userId, name: post.userName, handle: post.userHandle, image: post.userImage, sameHousehold: post.sameHousehold })}
           />
         ))}
       </div>
@@ -954,7 +1670,7 @@ function PostCard({ post, meId, onFollow, onUnfollow, onDelete, onViewRecipe, on
   const isOwn = post.userId === meId;
 
   return (
-    <div className="rounded-2xl border bg-card overflow-hidden">
+    <div className="rounded-2xl border bg-card overflow-hidden flex flex-col">
       <div className="flex items-center gap-3 px-3 pt-3 pb-2">
         <button type="button" onClick={onViewProfile} className="shrink-0">
           <Avatar className="h-9 w-9 ring-2 ring-border hover:ring-primary transition-all">
@@ -988,9 +1704,20 @@ function PostCard({ post, meId, onFollow, onUnfollow, onDelete, onViewRecipe, on
         </div>
       </div>
 
-      <div className="px-3 pb-3">
-        <p className="text-sm leading-relaxed text-foreground/90">{post.comment}</p>
+      <div className="px-3 pb-2 flex-1">
+        <p className="text-sm leading-relaxed text-foreground/90 line-clamp-2">{post.comment}</p>
       </div>
+
+      {post.recipeId && post.reviewCount > 0 && (
+        <div className="px-3 pb-2">
+          <p className="text-xs text-muted-foreground">
+            {post.reviewCount} {post.reviewCount === 1 ? 'review' : 'reviews'}
+            {post.recipeAvgRating != null && (
+              <span className="ml-1 text-foreground/70">· {post.recipeAvgRating.toFixed(1)} ★</span>
+            )}
+          </p>
+        </div>
+      )}
 
       {post.recipeId ? (
         <div className="mx-3 mb-3 rounded-xl border bg-background/60 overflow-hidden">
@@ -1005,11 +1732,16 @@ function PostCard({ post, meId, onFollow, onUnfollow, onDelete, onViewRecipe, on
                 className="flex items-center gap-1 text-[11px] font-medium rounded-full border border-border/60 px-2.5 py-1 hover:bg-accent transition-colors text-muted-foreground hover:text-foreground">
                 <BookOpen className="h-3 w-3" />View
               </button>
-              {!isOwn && (
+              {!isOwn && !post.sameHousehold && (
                 <button type="button" onClick={onRequestRecipe}
                   className="flex items-center gap-1 text-[11px] font-medium rounded-full border border-primary px-2.5 py-1 text-primary hover:bg-primary hover:text-primary-foreground transition-colors">
                   <Send className="h-3 w-3" />Request
                 </button>
+              )}
+              {!isOwn && post.sameHousehold && (
+                <span className="flex items-center gap-1 text-[11px] font-medium rounded-full border border-border/60 px-2.5 py-1 text-muted-foreground cursor-default">
+                  <Users className="h-3 w-3" />Household
+                </span>
               )}
             </div>
           </div>
@@ -1035,7 +1767,13 @@ function SearchMembersTab({ meId }: { meId: string }) {
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
   const [profileTarget, setProfileTarget] = useState<ProfileModalTarget | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const { data: myHousehold } = useQuery({
+    queryKey: queryKeys.household.mine(),
+    queryFn: () => api.get<{ id: string; name: string; role: string } | null>('/api/households/mine'),
+  });
+  const myHouseholdId = myHousehold?.id ?? null;
 
   const { data: users = [], isLoading, isFetching } = useQuery({
     queryKey: queryKeys.users.community(search),
@@ -1071,7 +1809,7 @@ function SearchMembersTab({ meId }: { meId: string }) {
 
   return (
     <div className="p-4 space-y-4">
-      <div className="relative">
+      <div className="relative max-w-xs sm:max-w-sm mx-auto">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input className="h-10 pl-10" placeholder="Search community members by handle…"
           value={query} onChange={(e) => handleInput(e.target.value)} autoComplete="off" />
@@ -1096,13 +1834,14 @@ function SearchMembersTab({ meId }: { meId: string }) {
       )}
 
       {query.length >= 2 && !isLoading && !isFetching && visibleUsers.length > 0 && (
-        <div className="space-y-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {visibleUsers.map((u) => {
             const isFollowing = followingSet.has(u.id);
+            const isHousehold = myHouseholdId !== null && u.householdId === myHouseholdId;
             return (
               <div key={u.id} className="flex items-center gap-3 rounded-xl border bg-card px-3 py-3 hover:bg-accent/30 transition-colors">
                 <button type="button" className="shrink-0"
-                  onClick={() => setProfileTarget({ userId: u.id, name: u.name, handle: u.handle, image: u.image })}>
+                  onClick={() => setProfileTarget({ userId: u.id, name: u.name, handle: u.handle, image: u.image, sameHousehold: isHousehold })}>
                   <Avatar className="h-10 w-10 ring-2 ring-border hover:ring-primary transition-all">
                     <AvatarImage src={u.image ?? undefined} />
                     <AvatarFallback className="text-sm font-semibold">{initials(u.name, u.handle ?? u.id)}</AvatarFallback>
@@ -1110,8 +1849,11 @@ function SearchMembersTab({ meId }: { meId: string }) {
                 </button>
                 <div className="min-w-0 flex-1">
                   <button type="button" className="text-left w-full"
-                    onClick={() => setProfileTarget({ userId: u.id, name: u.name, handle: u.handle, image: u.image })}>
-                    <p className="font-semibold text-sm truncate hover:text-primary transition-colors">{u.name ?? u.handle}</p>
+                    onClick={() => setProfileTarget({ userId: u.id, name: u.name, handle: u.handle, image: u.image, sameHousehold: isHousehold })}>
+                    <div className="flex items-center gap-1.5">
+                      <p className="font-semibold text-sm truncate hover:text-primary transition-colors">{u.name ?? u.handle}</p>
+                      {isHousehold && <Users className="h-3 w-3 text-muted-foreground shrink-0" />}
+                    </div>
                     {u.handle && <p className="text-xs text-muted-foreground">@{u.handle}</p>}
                     {u.bio && <p className="text-xs text-muted-foreground/70 truncate mt-0.5">{u.bio}</p>}
                   </button>
@@ -1144,6 +1886,12 @@ function FollowingTab({ meId, onViewUserFeed }: {
   const queryClient = useQueryClient();
   const [profileTarget, setProfileTarget] = useState<ProfileModalTarget | null>(null);
 
+  const { data: myHousehold } = useQuery({
+    queryKey: queryKeys.household.mine(),
+    queryFn: () => api.get<{ id: string; name: string; role: string } | null>('/api/households/mine'),
+  });
+  const myHouseholdId = myHousehold?.id ?? null;
+
   const { data: following = [], isLoading } = useQuery({
     queryKey: queryKeys.follows.following(),
     queryFn: () => api.get<FollowedUser[]>('/api/follows/following'),
@@ -1171,13 +1919,15 @@ function FollowingTab({ meId, onViewUserFeed }: {
   }
 
   return (
-    <div className="p-4 space-y-2">
+    <div className="p-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
       {following.map((u) => {
         const isPrivate = !u.isPublic;
+        const isHousehold = myHouseholdId !== null && u.householdId === myHouseholdId;
         return (
           <div key={u.id} className="flex items-center gap-3 rounded-xl border bg-card px-3 py-3">
             <button type="button"
-              onClick={!isPrivate ? () => setProfileTarget({ userId: u.id, name: u.name, handle: u.handle, image: u.image }) : undefined}
+              onClick={!isPrivate ? () => setProfileTarget({ userId: u.id, name: u.name, handle: u.handle, image: u.image, sameHousehold: isHousehold }) : undefined}
               className={cn('shrink-0', !isPrivate && 'cursor-pointer')}>
               <Avatar className={cn('h-10 w-10', !isPrivate && 'ring-2 ring-border hover:ring-primary transition-all')}>
                 {!isPrivate && <AvatarImage src={u.image ?? undefined} />}
@@ -1195,8 +1945,11 @@ function FollowingTab({ meId, onViewUserFeed }: {
                 </>
               ) : (
                 <button type="button" className="text-left w-full"
-                  onClick={() => setProfileTarget({ userId: u.id, name: u.name, handle: u.handle, image: u.image })}>
-                  <p className="text-sm font-semibold truncate hover:text-primary transition-colors">{u.name ?? u.handle ?? 'User'}</p>
+                  onClick={() => setProfileTarget({ userId: u.id, name: u.name, handle: u.handle, image: u.image, sameHousehold: isHousehold })}>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-semibold truncate hover:text-primary transition-colors">{u.name ?? u.handle ?? 'User'}</p>
+                    {isHousehold && <Users className="h-3 w-3 text-muted-foreground shrink-0" />}
+                  </div>
                   {u.handle && <p className="text-xs text-muted-foreground">@{u.handle}</p>}
                 </button>
               )}
@@ -1218,7 +1971,7 @@ function FollowingTab({ meId, onViewUserFeed }: {
           </div>
         );
       })}
-
+      </div>
       <UserProfileModal target={profileTarget} meId={meId} open={!!profileTarget} onClose={() => setProfileTarget(null)} />
     </div>
   );

@@ -32,7 +32,7 @@ type FormValues = z.infer<typeof schema>;
 function SignInPage() {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
-  const [showEmailSent, setShowEmailSent] = useState(() => {
+  const [showEmailSent] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('emailSent') === 'true';
   });
