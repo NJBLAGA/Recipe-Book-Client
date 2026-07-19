@@ -12,7 +12,7 @@ function AuthLayout() {
 
   useEffect(() => {
     if (!isPending && session) {
-      void navigate({ to: '/' });
+      void navigate({ to: '/recipes' });
     }
   }, [session, isPending, navigate]);
 

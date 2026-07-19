@@ -70,13 +70,13 @@ function SignInPage() {
       return;
     }
 
-    void navigate({ to: '/' });
+    void navigate({ to: '/recipes' });
   }
 
   async function signInWithGoogle() {
     await authClient.signIn.social({
       provider: 'google',
-      callbackURL: window.location.origin + '/',
+      callbackURL: window.location.origin + '/recipes',
     });
   }
 

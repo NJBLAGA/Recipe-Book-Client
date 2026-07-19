@@ -12,7 +12,7 @@ import {
   DoorOpen, ArrowLeftRight, Mail, Crown, Home, TriangleAlert,
   Star, UtensilsCrossed, X, UserPlus, Search, ChevronUp, ChevronDown,
   Plus, Globe, Lock, Send, BookOpen, Eye, Copy, Users,
-  ChevronLeft, ChevronRight, Scale, ChefHat,
+  ChevronLeft, ChevronRight, Scale, ChefHat, Maximize2,
 } from 'lucide-react';
 import { authClient } from '@/lib/auth';
 import { api, ApiError } from '@/lib/api';
@@ -897,6 +897,7 @@ function PinViewModal({ slot, open, onClose }: { slot: PinSlot; open: boolean; o
   const [servings, setServings] = useState<number | null>(null);
   const [system, setSystem] = useMeasureSystem();
   const [imageIdx, setImageIdx] = useState(0);
+  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
 
   const { data: recipe } = useQuery({
     queryKey: ['recipe-book', 'recipe', slot?.recipeId ?? ''],
@@ -930,6 +931,10 @@ function PinViewModal({ slot, open, onClose }: { slot: PinSlot; open: boolean; o
         {images.length > 0 && (
           <div className="relative shrink-0 bg-muted">
             <img src={images[imageIdx]?.url} alt={slot.recipeTitle} className="w-full h-48 object-cover" />
+            <button type="button" onClick={() => setLightboxIdx(imageIdx)}
+              className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-white text-[10px] font-medium hover:bg-black/70 transition-colors z-10">
+              <Maximize2 className="h-3 w-3" />Expand
+            </button>
             {images.length > 1 && (
               <>
                 <button type="button" onClick={() => setImageIdx((i) => (i - 1 + images.length) % images.length)}
@@ -1021,6 +1026,37 @@ function PinViewModal({ slot, open, onClose }: { slot: PinSlot; open: boolean; o
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {lightboxIdx !== null && images[lightboxIdx] && (
+          <div className="absolute inset-0 z-[100] flex items-center justify-center bg-background/95 backdrop-blur-sm"
+            onClick={() => setLightboxIdx(null)}>
+            <button type="button" onClick={() => setLightboxIdx(null)}
+              className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
+              <X className="h-5 w-5" />
+            </button>
+            {images.length > 1 && (
+              <>
+                <button type="button" onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => ((i ?? 0) - 1 + images.length) % images.length); }}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <button type="button" onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => ((i ?? 0) + 1) % images.length); }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+              </>
+            )}
+            <img src={images[lightboxIdx].url} alt="" className="max-h-[80%] max-w-[85%] object-contain rounded-xl shadow-2xl" onClick={(e) => e.stopPropagation()} />
+            {images.length > 1 && (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
+                {images.map((_, i) => (
+                  <button key={i} type="button" onClick={(e) => { e.stopPropagation(); setLightboxIdx(i); }}
+                    className={cn('h-2 rounded-full transition-all', i === lightboxIdx ? 'w-6 bg-foreground' : 'w-2 bg-foreground/30')} />
+                ))}
               </div>
             )}
           </div>
@@ -1199,7 +1235,7 @@ function HouseholdTab({ household, meId }: {
                 value={transferTo} onChange={(e) => setTransferTo(e.target.value)}>
                 <option value="">Select member…</option>
                 {otherMembers.map((m) => (
-                  <option key={m.userId} value={m.userId}>{m.name ?? m.handle ?? m.userId}</option>
+                  <option key={m.userId} value={m.userId}>{m.handle ? '@' + m.handle : m.name ?? m.userId}</option>
                 ))}
               </select>
               <AlertDialog>
@@ -1338,8 +1374,7 @@ function InviteSection({ householdId, meId }: { householdId: string; meId: strin
                       <AvatarFallback className="text-xs font-semibold">{initials(u.name, u.handle ?? u.id)}</AvatarFallback>
                     </Avatar>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">{u.name ?? u.handle}</p>
-                      {u.handle && <p className="text-xs text-muted-foreground">@{u.handle}</p>}
+                      <p className="text-sm font-medium truncate">{u.handle ? `@${u.handle}` : u.name ?? 'User'}</p>
                       {u.householdName && <p className="text-xs text-muted-foreground/60">{u.householdName}</p>}
                     </div>
                     {alreadyMember ? (
@@ -1388,6 +1423,7 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
   const [servings, setServings] = useState<number | null>(null);
   const [system, setSystem] = useMeasureSystem();
   const [imgIdx, setImgIdx] = useState(0);
+  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
@@ -1437,7 +1473,7 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
   });
 
   useEffect(() => {
-    if (open) { setImgIdx(0); setShowReviewForm(false); setReviewRating(0); setReviewComment(''); }
+    if (open) { setImgIdx(0); setLightboxIdx(null); setShowReviewForm(false); setReviewRating(0); setReviewComment(''); }
   }, [open]);
 
   useEffect(() => {
@@ -1466,6 +1502,10 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
         {images.length > 0 && (
           <div className="relative shrink-0 bg-muted">
             <img src={images[imgIdx]?.url} alt={target.recipeTitle ?? ''} className="w-full h-48 object-cover" />
+            <button type="button" onClick={() => setLightboxIdx(imgIdx)}
+              className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-white text-[10px] font-medium hover:bg-black/70 transition-colors z-10">
+              <Maximize2 className="h-3 w-3" />Expand
+            </button>
             {images.length > 1 && (
               <>
                 <button type="button" onClick={() => setImgIdx((i) => (i - 1 + images.length) % images.length)}
@@ -1596,6 +1636,37 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
             <p className="text-xs text-muted-foreground">This recipe is in your household's book.</p>
           </div>
         )}
+
+        {lightboxIdx !== null && images[lightboxIdx] && (
+          <div className="absolute inset-0 z-[100] flex items-center justify-center bg-background/95 backdrop-blur-sm"
+            onClick={() => setLightboxIdx(null)}>
+            <button type="button" onClick={() => setLightboxIdx(null)}
+              className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
+              <X className="h-5 w-5" />
+            </button>
+            {images.length > 1 && (
+              <>
+                <button type="button" onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => ((i ?? 0) - 1 + images.length) % images.length); }}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <button type="button" onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => ((i ?? 0) + 1) % images.length); }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+              </>
+            )}
+            <img src={images[lightboxIdx].url} alt="" className="max-h-[80%] max-w-[85%] object-contain rounded-xl shadow-2xl" onClick={(e) => e.stopPropagation()} />
+            {images.length > 1 && (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
+                {images.map((_, i) => (
+                  <button key={i} type="button" onClick={(e) => { e.stopPropagation(); setLightboxIdx(i); }}
+                    className={cn('h-2 rounded-full transition-all', i === lightboxIdx ? 'w-6 bg-foreground' : 'w-2 bg-foreground/30')} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -1719,11 +1790,10 @@ function MemberCard({ member, onClick }: { member: Member; onClick: () => void }
       </Avatar>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <p className="truncate text-sm font-medium">{member.name ?? 'Unknown'}</p>
+          <p className="truncate text-sm font-medium">{member.handle ? `@${member.handle}` : member.name ?? 'Unknown'}</p>
           {member.role === 'OWNER' && <Crown className="h-3 w-3 shrink-0 text-primary" />}
           <Users className="h-3 w-3 shrink-0 text-muted-foreground" />
         </div>
-        {member.handle && <p className="text-muted-foreground text-xs">@{member.handle}</p>}
       </div>
       <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0">View →</span>
     </button>
@@ -2009,10 +2079,10 @@ function HouseholdNotifications({ household, seenNotifIds, onMarkSeen }: {
                 )}
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">
-                    {item.type === 'INVITE' ? `Invite To ${item.householdName}` : `${item.fromName ?? item.fromHandle ?? 'Someone'} Wants To Join`}
+                    {item.type === 'INVITE' ? `Invite To ${item.householdName}` : `${item.fromHandle ? '@' + item.fromHandle : item.fromName ?? 'Someone'} Wants To Join`}
                   </p>
                   <p className="text-muted-foreground truncate text-xs mt-0.5">
-                    {item.type === 'INVITE' ? `From ${item.fromName ?? item.fromHandle ?? 'someone'}` : item.householdName}
+                    {item.type === 'INVITE' ? `From ${item.fromHandle ? '@' + item.fromHandle : item.fromName ?? 'someone'}` : item.householdName}
                   </p>
                 </div>
               </div>
@@ -2115,6 +2185,7 @@ function ShareRecipeViewModal({ share, open, onClose, onCopy }: {
   onCopy: (s: ShareItem) => void;
 }) {
   const [imgIdx, setImgIdx] = useState(0);
+  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   const [servings, setServings] = useState(4);
   const [system, setSystem] = useMeasureSystem();
 
@@ -2125,7 +2196,7 @@ function ShareRecipeViewModal({ share, open, onClose, onCopy }: {
   });
 
   useEffect(() => {
-    if (open) setImgIdx(0);
+    if (open) { setImgIdx(0); setLightboxIdx(null); }
   }, [open]);
 
   useEffect(() => {
@@ -2149,6 +2220,10 @@ function ShareRecipeViewModal({ share, open, onClose, onCopy }: {
         {images.length > 0 && (
           <div className="relative w-full h-44 shrink-0 bg-muted overflow-hidden">
             <img src={images[imgIdx].url} alt={share.recipeTitle ?? ''} className="w-full h-full object-cover" />
+            <button type="button" onClick={() => setLightboxIdx(imgIdx)}
+              className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-white text-[10px] font-medium hover:bg-black/70 transition-colors z-10">
+              <Maximize2 className="h-3 w-3" />Expand
+            </button>
             {images.length > 1 && (
               <>
                 <button type="button" onClick={() => setImgIdx((i) => (i - 1 + images.length) % images.length)}
@@ -2265,6 +2340,37 @@ function ShareRecipeViewModal({ share, open, onClose, onCopy }: {
             <Copy className="h-3.5 w-3.5" />Save a Copy
           </Button>
         </div>
+
+        {lightboxIdx !== null && images[lightboxIdx] && (
+          <div className="absolute inset-0 z-[100] flex items-center justify-center bg-background/95 backdrop-blur-sm"
+            onClick={() => setLightboxIdx(null)}>
+            <button type="button" onClick={() => setLightboxIdx(null)}
+              className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
+              <X className="h-5 w-5" />
+            </button>
+            {images.length > 1 && (
+              <>
+                <button type="button" onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => ((i ?? 0) - 1 + images.length) % images.length); }}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <button type="button" onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => ((i ?? 0) + 1) % images.length); }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+              </>
+            )}
+            <img src={images[lightboxIdx].url} alt="" className="max-h-[80%] max-w-[85%] object-contain rounded-xl shadow-2xl" onClick={(e) => e.stopPropagation()} />
+            {images.length > 1 && (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
+                {images.map((_, i) => (
+                  <button key={i} type="button" onClick={(e) => { e.stopPropagation(); setLightboxIdx(i); }}
+                    className={cn('h-2 rounded-full transition-all', i === lightboxIdx ? 'w-6 bg-foreground' : 'w-2 bg-foreground/30')} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

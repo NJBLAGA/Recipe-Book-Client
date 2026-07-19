@@ -5,7 +5,7 @@ import {
   Search, Users, BookOpen, UserPlus, UserMinus,
   Send, UtensilsCrossed, Lock, Plus, ChevronRight, ChevronDown,
   Trash2, Star, ChevronLeft, LayoutList, X, Scale, ChefHat, MessageSquare, Eye, Pencil,
-  SlidersHorizontal, TrendingUp,
+  SlidersHorizontal, TrendingUp, Maximize2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, ApiError } from '@/lib/api';
@@ -19,6 +19,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
 
@@ -44,7 +45,7 @@ interface CommunityPost {
   id: string; comment: string; createdAt: string;
   userId: string; userName: string | null; userHandle: string | null; userImage: string | null;
   recipeId: string | null; recipeTitle: string | null; recipeDescription: string | null;
-  recipeImage: string | null; isFollowing: boolean; isOwnPost: boolean;
+  recipeImages: string[]; isFollowing: boolean; isOwnPost: boolean;
   reviewCount: number; recipeAvgRating: number | null; sameHousehold: boolean;
 }
 
@@ -348,6 +349,7 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
   const [servings, setServings] = useState<number | null>(null);
   const [system, setSystem] = useMeasureSystem();
   const [imgIdx, setImgIdx] = useState(0);
+  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
@@ -404,7 +406,7 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
   });
 
   useEffect(() => {
-    if (open) { setImgIdx(0); setShowReviewForm(false); setReviewRating(0); setReviewComment(''); }
+    if (open) { setImgIdx(0); setLightboxIdx(null); setShowReviewForm(false); setReviewRating(0); setReviewComment(''); }
   }, [open]);
 
   useEffect(() => {
@@ -441,6 +443,10 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
         {images.length > 0 && (
           <div className="relative shrink-0 bg-muted">
             <img src={images[imgIdx]?.url} alt={target.recipeTitle ?? ''} className="w-full h-48 object-cover" />
+            <button type="button" onClick={() => setLightboxIdx(imgIdx)}
+              className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-white text-[10px] font-medium hover:bg-black/70 transition-colors z-10">
+              <Maximize2 className="h-3 w-3" />Expand
+            </button>
             {images.length > 1 && (
               <>
                 <button type="button" onClick={() => setImgIdx((i) => (i - 1 + images.length) % images.length)}
@@ -592,6 +598,37 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
             <p className="text-xs text-muted-foreground">This recipe is in your household's book.</p>
           </div>
         )}
+
+        {lightboxIdx !== null && images[lightboxIdx] && (
+          <div className="absolute inset-0 z-[100] flex items-center justify-center bg-background/95 backdrop-blur-sm"
+            onClick={() => setLightboxIdx(null)}>
+            <button type="button" onClick={() => setLightboxIdx(null)}
+              className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
+              <X className="h-5 w-5" />
+            </button>
+            {images.length > 1 && (
+              <>
+                <button type="button" onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => ((i ?? 0) - 1 + images.length) % images.length); }}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <button type="button" onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => ((i ?? 0) + 1) % images.length); }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+              </>
+            )}
+            <img src={images[lightboxIdx].url} alt="" className="max-h-[80%] max-w-[85%] object-contain rounded-xl shadow-2xl" onClick={(e) => e.stopPropagation()} />
+            {images.length > 1 && (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
+                {images.map((_, i) => (
+                  <button key={i} type="button" onClick={(e) => { e.stopPropagation(); setLightboxIdx(i); }}
+                    className={cn('h-2 rounded-full transition-all', i === lightboxIdx ? 'w-6 bg-foreground' : 'w-2 bg-foreground/30')} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -601,9 +638,10 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
 
 const REVIEWS_PREVIEW = 3;
 
-function ReviewExpandModal({ review, meId, myShareId, postId, open, onClose }: {
+function ReviewExpandModal({ review, meId, myShareId, postId, open, onClose, onViewProfile }: {
   review: RecipeReview | null; meId: string; myShareId: string | null;
   postId: string; open: boolean; onClose: () => void;
+  onViewProfile?: (target: ProfileModalTarget) => void;
 }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
@@ -641,18 +679,20 @@ function ReviewExpandModal({ review, meId, myShareId, postId, open, onClose }: {
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="w-[calc(100vw-32px)] max-w-sm sm:max-w-md">
+      <DialogContent className="w-[calc(100vw-32px)] max-w-sm sm:max-w-md overflow-hidden">
         <DialogHeader>
           <DialogTitle className="text-sm font-semibold">Review</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <Avatar className="h-8 w-8">
-              <AvatarImage src={review.reviewerImage ?? undefined} />
-              <AvatarFallback className="text-xs">{initials(review.reviewerName, review.reviewerHandle ?? '?')}</AvatarFallback>
-            </Avatar>
+            <button type="button" onClick={() => review.reviewerId && onViewProfile?.({ userId: review.reviewerId, name: review.reviewerName, handle: review.reviewerHandle, image: review.reviewerImage, sameHousehold: false })}>
+              <Avatar className="h-8 w-8 hover:ring-2 hover:ring-primary transition-all cursor-pointer">
+                <AvatarImage src={review.reviewerImage ?? undefined} />
+                <AvatarFallback className="text-xs">{initials(review.reviewerName, review.reviewerHandle ?? '?')}</AvatarFallback>
+              </Avatar>
+            </button>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">{review.reviewerName ?? review.reviewerHandle ?? 'User'}</p>
+              <p className="text-sm font-semibold">{review.reviewerHandle ? `@${review.reviewerHandle}` : 'User'}</p>
               <p className="text-[10px] text-muted-foreground">{formatDate(review.updatedAt)}</p>
             </div>
             <StarDisplay rating={review.rating} />
@@ -661,7 +701,7 @@ function ReviewExpandModal({ review, meId, myShareId, postId, open, onClose }: {
           {!editing ? (
             <>
               {review.comment
-                ? <p className="text-sm text-foreground/80 leading-relaxed break-words">{review.comment}</p>
+                ? <p className="text-sm text-foreground/80 leading-relaxed [word-break:break-word] [overflow-wrap:anywhere]">{review.comment}</p>
                 : <p className="text-xs text-muted-foreground italic">No written comment.</p>}
               {isOwn && myShareId && (
                 <div className="flex justify-end pt-1">
@@ -703,8 +743,9 @@ function ReviewExpandModal({ review, meId, myShareId, postId, open, onClose }: {
   );
 }
 
-function ReviewsSection({ reviews, meId, myShareId, postId }: {
+function ReviewsSection({ reviews, meId, myShareId, postId, onViewProfile }: {
   reviews: RecipeReview[]; meId: string; myShareId: string | null; postId: string;
+  onViewProfile: (target: ProfileModalTarget) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [expandedReview, setExpandedReview] = useState<RecipeReview | null>(null);
@@ -729,12 +770,14 @@ function ReviewsSection({ reviews, meId, myShareId, postId }: {
             {visible.map((r) => (
               <div key={r.id} className="rounded-xl border bg-card px-3 py-3 flex flex-col gap-1.5 overflow-hidden">
                 <div className="flex items-center gap-2">
-                  <Avatar className="h-7 w-7 shrink-0">
-                    <AvatarImage src={r.reviewerImage ?? undefined} />
-                    <AvatarFallback className="text-[10px]">{initials(r.reviewerName, r.reviewerHandle ?? '?')}</AvatarFallback>
-                  </Avatar>
+                  <button type="button" className="shrink-0" onClick={() => r.reviewerId && onViewProfile({ userId: r.reviewerId, name: r.reviewerName, handle: r.reviewerHandle, image: r.reviewerImage, sameHousehold: false })}>
+                    <Avatar className="h-7 w-7 hover:ring-2 hover:ring-primary transition-all">
+                      <AvatarImage src={r.reviewerImage ?? undefined} />
+                      <AvatarFallback className="text-[10px]">{initials(r.reviewerName, r.reviewerHandle ?? '?')}</AvatarFallback>
+                    </Avatar>
+                  </button>
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold truncate">{r.reviewerName ?? r.reviewerHandle ?? 'User'}</p>
+                    <p className="text-xs font-semibold truncate">{r.reviewerHandle ? `@${r.reviewerHandle}` : 'User'}</p>
                   </div>
                   <StarDisplay rating={r.rating} />
                 </div>
@@ -766,6 +809,7 @@ function ReviewsSection({ reviews, meId, myShareId, postId }: {
         postId={postId}
         open={!!expandedReview}
         onClose={() => setExpandedReview(null)}
+        onViewProfile={onViewProfile}
       />
     </div>
   );
@@ -780,10 +824,12 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
   const [servings, setServings] = useState<number | null>(null);
   const [system, setSystem] = useMeasureSystem();
   const [imageIdx, setImageIdx] = useState(0);
+  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
   const [showReviewForm, setShowReviewForm] = useState(false);
   const reviewCommentRef = useRef<HTMLTextAreaElement>(null);
+  const [reviewerProfileTarget, setReviewerProfileTarget] = useState<ProfileModalTarget | null>(null);
 
   const { data: recipe } = useQuery({
     queryKey: queryKeys.community.postRecipe(post?.id ?? ''),
@@ -796,6 +842,7 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
     setReviewRating(0);
     setReviewComment('');
     setImageIdx(0);
+    setLightboxIdx(null);
   }, [post?.id]);
 
   useEffect(() => {
@@ -878,6 +925,7 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
   const isLoading = !recipe && !!post.recipeId;
 
   return (
+    <>
     <Dialog open={!!post} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="w-[calc(100vw-24px)] max-w-lg sm:max-w-xl lg:max-w-2xl p-0 gap-0 overflow-hidden flex flex-col max-h-[90vh]" hideClose>
         {/* Custom themed close button */}
@@ -890,6 +938,10 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
         {images.length > 0 && (
           <div className="relative shrink-0 bg-muted">
             <img src={images[imageIdx]?.url} alt="" className="w-full h-48 object-cover" />
+            <button type="button" onClick={() => setLightboxIdx(imageIdx)}
+              className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-white text-[10px] font-medium hover:bg-black/70 transition-colors z-10">
+              <Maximize2 className="h-3 w-3" />Expand
+            </button>
             {images.length > 1 && (
               <>
                 <button type="button" onClick={() => setImageIdx((i) => (i - 1 + images.length) % images.length)}
@@ -992,6 +1044,7 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
                 meId={meId}
                 myShareId={myShare?.id ?? null}
                 postId={post.id}
+                onViewProfile={setReviewerProfileTarget}
               />
 
               {/* Rate & review form — toggled from bottom bar */}
@@ -1063,8 +1116,46 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
             <p className="text-xs text-muted-foreground">This recipe is in your household's book.</p>
           </div>
         )}
+
+        {lightboxIdx !== null && images[lightboxIdx] && (
+          <div className="absolute inset-0 z-[100] flex items-center justify-center bg-background/95 backdrop-blur-sm"
+            onClick={() => setLightboxIdx(null)}>
+            <button type="button" onClick={() => setLightboxIdx(null)}
+              className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
+              <X className="h-5 w-5" />
+            </button>
+            {images.length > 1 && (
+              <>
+                <button type="button" onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => ((i ?? 0) - 1 + images.length) % images.length); }}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <button type="button" onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => ((i ?? 0) + 1) % images.length); }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+              </>
+            )}
+            <img src={images[lightboxIdx].url} alt="" className="max-h-[80%] max-w-[85%] object-contain rounded-xl shadow-2xl" onClick={(e) => e.stopPropagation()} />
+            {images.length > 1 && (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
+                {images.map((_, i) => (
+                  <button key={i} type="button" onClick={(e) => { e.stopPropagation(); setLightboxIdx(i); }}
+                    className={cn('h-2 rounded-full transition-all', i === lightboxIdx ? 'w-6 bg-foreground' : 'w-2 bg-foreground/30')} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
+    <UserProfileModal
+      target={reviewerProfileTarget}
+      meId={meId}
+      open={!!reviewerProfileTarget}
+      onClose={() => setReviewerProfileTarget(null)}
+    />
+    </>
   );
 }
 
@@ -1455,21 +1546,149 @@ function FeedTab({ meId, filterUserId, filterUserName, onClearFilter }: {
     },
   });
 
+  const filterPanelContent = (
+    <div className="border-t border-border/40 px-3 py-3 space-y-4">
+
+      {/* TIME PERIOD */}
+      <div className="space-y-2">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Time Period</p>
+        <div className="flex flex-wrap gap-1.5">
+          {([
+            { value: 'all', label: 'All Time' },
+            { value: 'year', label: 'Year' },
+            { value: 'month', label: 'Month' },
+            { value: 'day', label: 'Day' },
+          ] as { value: TimeMode; label: string }[]).map(({ value, label }) => (
+            <button key={value} type="button" onClick={() => setTimeMode(value)}
+              className={cn('text-[11px] font-medium rounded-full border px-2.5 py-1 transition-colors',
+                timeMode === value ? 'bg-primary text-primary-foreground border-primary' : 'border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/30')}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {timeMode !== 'all' && (
+          <div className="flex flex-wrap gap-2 pt-0.5">
+            <Select value={String(selYear)} onValueChange={(v) => setSelYear(Number(v))}>
+              <SelectTrigger className="h-8 w-[90px] text-xs bg-primary/15 text-primary border-primary/20 font-medium">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {years.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {(timeMode === 'month' || timeMode === 'day') && (
+              <Select value={String(selMonth)} onValueChange={(v) => setSelMonth(Number(v))}>
+                <SelectTrigger className="h-8 w-[120px] text-xs bg-primary/15 text-primary border-primary/20 font-medium">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTH_NAMES.map((name, i) => <SelectItem key={i + 1} value={String(i + 1)}>{name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
+            {timeMode === 'day' && (
+              <Select value={String(selDay)} onValueChange={(v) => setSelDay(Number(v))}>
+                <SelectTrigger className="h-8 w-[72px] text-xs bg-primary/15 text-primary border-primary/20 font-medium">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => (
+                    <SelectItem key={d} value={String(d)}>{d}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* SORT BY */}
+      <div className="space-y-1.5">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Sort By</p>
+        <div className="flex flex-wrap gap-1.5">
+          {([
+            { value: 'recent', label: 'Newest First' },
+            { value: 'oldest', label: 'Oldest First' },
+            { value: 'top-rated', label: 'Top Rated', icon: TrendingUp },
+            { value: 'most-reviewed', label: 'Most Reviewed', icon: MessageSquare },
+            { value: 'unreviewed', label: 'No Reviews Yet' },
+            { value: 'az', label: 'A–Z by Recipe' },
+          ] as { value: SortBy; label: string; icon?: React.ComponentType<{ className?: string }> }[]).map(({ value, label, icon: Icon }) => (
+            <button key={value} type="button" onClick={() => setSortBy(value)}
+              className={cn('flex items-center gap-1 text-[11px] font-medium rounded-full border px-2.5 py-1 transition-colors',
+                sortBy === value ? 'bg-primary text-primary-foreground border-primary' : 'border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/30')}>
+              {Icon && <Icon className="h-3 w-3" />}
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* CONTENT */}
+      <div className="space-y-1.5">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Content</p>
+        <div className="flex flex-wrap gap-1.5">
+          {([
+            { value: 'all', label: 'All Posts' },
+            { value: 'with-recipe', label: 'Has Recipe' },
+            { value: 'no-recipe', label: 'No Recipe' },
+          ] as { value: PostType; label: string }[]).map(({ value, label }) => (
+            <button key={value} type="button" onClick={() => setPostType(value)}
+              className={cn('text-[11px] font-medium rounded-full border px-2.5 py-1 transition-colors',
+                postType === value ? 'bg-primary text-primary-foreground border-primary' : 'border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/30')}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* MIN RATING — only relevant when recipes are shown */}
+      {postType !== 'no-recipe' && (
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Min Rating</p>
+          <div className="flex flex-wrap gap-1.5">
+            {([
+              { value: 0, label: 'Any' },
+              { value: 3, label: '3★+' },
+              { value: 4, label: '4★+' },
+              { value: 5, label: '5★ Only' },
+            ] as { value: 0 | 3 | 4 | 5; label: string }[]).map(({ value, label }) => (
+              <button key={value} type="button" onClick={() => setMinRating(value)}
+                className={cn('text-[11px] font-medium rounded-full border px-2.5 py-1 transition-colors',
+                  minRating === value ? 'bg-primary text-primary-foreground border-primary' : 'border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/30')}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {hasActiveFilters && (
+        <button type="button" onClick={clearFilters}
+          className="text-[11px] text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2">
+          Clear all filters
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <div className="p-4 space-y-3">
+
+      {/* Header row — all breakpoints */}
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground">
-          {filterUserId ? `Posts by ${filterUserName ?? 'user'}` : 'What the community is cooking'}
+          {filterUserId ? `Posts by ${filterUserName ?? 'user'}` : 'Check out what the community is cooking'}
         </p>
         <Button size="sm" className="gap-1.5 h-8 text-xs shrink-0" onClick={() => setCreateOpen(true)}>
           <Plus className="h-3.5 w-3.5" />Share A Recipe
         </Button>
       </div>
 
-      {/* Username search */}
-      <div className="relative">
+      {/* Mobile/tablet: search standalone */}
+      <div className="relative lg:hidden">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-        <Input className="h-9 pl-9 pr-8 text-sm" placeholder="Search posts by username…"
+        <Input className="h-9 pl-9 pr-8 text-sm" placeholder="Search posts by username or handle…"
           value={feedSearch} onChange={(e) => setFeedSearch(e.target.value)} autoComplete="off" />
         {feedSearch && (
           <button type="button" onClick={() => setFeedSearch('')}
@@ -1477,6 +1696,31 @@ function FeedTab({ meId, filterUserId, filterUserName, onClearFilter }: {
             <X className="h-3.5 w-3.5" />
           </button>
         )}
+      </div>
+
+      {/* Desktop: search (60%) + filter (40%) */}
+      <div className="hidden lg:flex gap-3">
+        <div className="w-[60%] relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input className="h-9 pl-9 pr-8 text-sm w-full" placeholder="Search posts by username or handle…"
+            value={feedSearch} onChange={(e) => setFeedSearch(e.target.value)} autoComplete="off" />
+          {feedSearch && (
+            <button type="button" onClick={() => setFeedSearch('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+        <div className="w-[40%]">
+          <button type="button"
+            onClick={() => setFiltersOpen((v) => !v)}
+            className="w-full h-9 flex items-center gap-2 px-3 rounded-xl border border-border/60 bg-card/50 text-left hover:bg-accent/30 transition-colors">
+            <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span className="text-xs font-medium flex-1">Filters</span>
+            {hasActiveFilters && <span className="h-2 w-2 rounded-full bg-primary shrink-0" />}
+            <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 shrink-0', filtersOpen && 'rotate-180')} />
+          </button>
+        </div>
       </div>
 
       {filterUserId && (
@@ -1489,8 +1733,8 @@ function FeedTab({ meId, filterUserId, filterUserName, onClearFilter }: {
         </div>
       )}
 
-      {/* Collapsible filters */}
-      <div className="rounded-xl border border-border/60 bg-card/50 overflow-hidden">
+      {/* Collapsible filters — mobile/tablet */}
+      <div className="lg:hidden rounded-xl border border-border/60 bg-card/50 overflow-hidden">
         <button type="button"
           onClick={() => setFiltersOpen((v) => !v)}
           className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-accent/30 transition-colors">
@@ -1499,121 +1743,15 @@ function FeedTab({ meId, filterUserId, filterUserName, onClearFilter }: {
           {hasActiveFilters && <span className="h-2 w-2 rounded-full bg-primary shrink-0" />}
           <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 shrink-0', filtersOpen && 'rotate-180')} />
         </button>
-
-        {filtersOpen && (
-          <div className="border-t border-border/40 px-3 py-3 space-y-4">
-
-            {/* TIME PERIOD */}
-            <div className="space-y-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Time Period</p>
-              <div className="flex flex-wrap gap-1.5">
-                {([
-                  { value: 'all', label: 'All Time' },
-                  { value: 'year', label: 'Year' },
-                  { value: 'month', label: 'Month' },
-                  { value: 'day', label: 'Day' },
-                ] as { value: TimeMode; label: string }[]).map(({ value, label }) => (
-                  <button key={value} type="button" onClick={() => setTimeMode(value)}
-                    className={cn('text-[11px] font-medium rounded-full border px-2.5 py-1 transition-colors',
-                      timeMode === value ? 'bg-primary text-primary-foreground border-primary' : 'border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/30')}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {timeMode !== 'all' && (
-                <div className="flex flex-wrap gap-2 pt-0.5">
-                  <select value={selYear} onChange={(e) => setSelYear(Number(e.target.value))}
-                    className="text-xs rounded-lg border border-border/60 bg-background px-2 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
-                    {years.map((y) => <option key={y} value={y}>{y}</option>)}
-                  </select>
-                  {(timeMode === 'month' || timeMode === 'day') && (
-                    <select value={selMonth} onChange={(e) => setSelMonth(Number(e.target.value))}
-                      className="text-xs rounded-lg border border-border/60 bg-background px-2 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
-                      {MONTH_NAMES.map((name, i) => <option key={i + 1} value={i + 1}>{name}</option>)}
-                    </select>
-                  )}
-                  {timeMode === 'day' && (
-                    <select value={selDay} onChange={(e) => setSelDay(Number(e.target.value))}
-                      className="text-xs rounded-lg border border-border/60 bg-background px-2 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
-                      {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => (
-                        <option key={d} value={d}>{d}</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* SORT BY */}
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Sort By</p>
-              <div className="flex flex-wrap gap-1.5">
-                {([
-                  { value: 'recent', label: 'Newest First' },
-                  { value: 'oldest', label: 'Oldest First' },
-                  { value: 'top-rated', label: 'Top Rated', icon: TrendingUp },
-                  { value: 'most-reviewed', label: 'Most Reviewed', icon: MessageSquare },
-                  { value: 'unreviewed', label: 'No Reviews Yet' },
-                  { value: 'az', label: 'A–Z by Recipe' },
-                ] as { value: SortBy; label: string; icon?: React.ComponentType<{ className?: string }> }[]).map(({ value, label, icon: Icon }) => (
-                  <button key={value} type="button" onClick={() => setSortBy(value)}
-                    className={cn('flex items-center gap-1 text-[11px] font-medium rounded-full border px-2.5 py-1 transition-colors',
-                      sortBy === value ? 'bg-primary text-primary-foreground border-primary' : 'border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/30')}>
-                    {Icon && <Icon className="h-3 w-3" />}
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* CONTENT */}
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Content</p>
-              <div className="flex flex-wrap gap-1.5">
-                {([
-                  { value: 'all', label: 'All Posts' },
-                  { value: 'with-recipe', label: 'Has Recipe' },
-                  { value: 'no-recipe', label: 'No Recipe' },
-                ] as { value: PostType; label: string }[]).map(({ value, label }) => (
-                  <button key={value} type="button" onClick={() => setPostType(value)}
-                    className={cn('text-[11px] font-medium rounded-full border px-2.5 py-1 transition-colors',
-                      postType === value ? 'bg-primary text-primary-foreground border-primary' : 'border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/30')}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* MIN RATING — only relevant when recipes are shown */}
-            {postType !== 'no-recipe' && (
-              <div className="space-y-1.5">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Min Rating</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {([
-                    { value: 0, label: 'Any' },
-                    { value: 3, label: '3★+' },
-                    { value: 4, label: '4★+' },
-                    { value: 5, label: '5★ Only' },
-                  ] as { value: 0 | 3 | 4 | 5; label: string }[]).map(({ value, label }) => (
-                    <button key={value} type="button" onClick={() => setMinRating(value)}
-                      className={cn('text-[11px] font-medium rounded-full border px-2.5 py-1 transition-colors',
-                        minRating === value ? 'bg-primary text-primary-foreground border-primary' : 'border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/30')}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {hasActiveFilters && (
-              <button type="button" onClick={clearFilters}
-                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2">
-                Clear all filters
-              </button>
-            )}
-          </div>
-        )}
+        {filtersOpen && filterPanelContent}
       </div>
+
+      {/* Desktop: filter panel */}
+      {filtersOpen && (
+        <div className="hidden lg:block rounded-xl border border-border/60 bg-card/50 overflow-hidden">
+          {filterPanelContent}
+        </div>
+      )}
 
       {isLoading && <div className="flex justify-center py-10"><div className="h-6 w-6 animate-spin rounded-full border-2 border-primary/30 border-t-transparent" /></div>}
 
@@ -1668,6 +1806,8 @@ function PostCard({ post, meId, onFollow, onUnfollow, onDelete, onViewRecipe, on
   onViewRecipe: () => void; onRequestRecipe: () => void; onViewProfile: () => void;
 }) {
   const isOwn = post.userId === meId;
+  const [imgIdx, setImgIdx] = useState(0);
+  const imgs = post.recipeImages;
 
   return (
     <div className="rounded-2xl border bg-card overflow-hidden flex flex-col">
@@ -1680,9 +1820,8 @@ function PostCard({ post, meId, onFollow, onUnfollow, onDelete, onViewRecipe, on
         </button>
         <div className="min-w-0 flex-1">
           <button type="button" onClick={onViewProfile} className="text-left">
-            <p className="text-sm font-semibold truncate hover:text-primary transition-colors">{post.userName ?? post.userHandle ?? 'User'}</p>
+            <p className="text-sm font-semibold truncate hover:text-primary transition-colors">{post.userHandle ? `@${post.userHandle}` : post.userName ?? 'User'}</p>
           </button>
-          {post.userHandle && <p className="text-xs text-muted-foreground">@{post.userHandle}</p>}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           {!isOwn && (
@@ -1721,7 +1860,28 @@ function PostCard({ post, meId, onFollow, onUnfollow, onDelete, onViewRecipe, on
 
       {post.recipeId ? (
         <div className="mx-3 mb-3 rounded-xl border bg-background/60 overflow-hidden">
-          {post.recipeImage && <img src={post.recipeImage} alt={post.recipeTitle ?? ''} className="w-full h-36 object-cover" />}
+          {imgs.length > 0 && (
+            <div className="relative w-full h-36 bg-muted overflow-hidden">
+              <img src={imgs[imgIdx]} alt={post.recipeTitle ?? ''} className="w-full h-full object-cover" />
+              {imgs.length > 1 && (
+                <>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); setImgIdx((i) => (i - 1 + imgs.length) % imgs.length); }}
+                    className="absolute left-1.5 top-1/2 -translate-y-1/2 h-6 w-6 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors">
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); setImgIdx((i) => (i + 1) % imgs.length); }}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 h-6 w-6 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors">
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                  <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 flex gap-1">
+                    {imgs.map((_, i) => (
+                      <span key={i} className={cn('h-1 rounded-full transition-all', i === imgIdx ? 'w-3 bg-white' : 'w-1 bg-white/50')} />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           <div className="flex items-center gap-2 px-3 py-2.5">
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold truncate">{post.recipeTitle}</p>
@@ -1851,10 +2011,9 @@ function SearchMembersTab({ meId }: { meId: string }) {
                   <button type="button" className="text-left w-full"
                     onClick={() => setProfileTarget({ userId: u.id, name: u.name, handle: u.handle, image: u.image, sameHousehold: isHousehold })}>
                     <div className="flex items-center gap-1.5">
-                      <p className="font-semibold text-sm truncate hover:text-primary transition-colors">{u.name ?? u.handle}</p>
+                      <p className="font-semibold text-sm truncate hover:text-primary transition-colors">{u.handle ? '@' + u.handle : u.name ?? 'User'}</p>
                       {isHousehold && <Users className="h-3 w-3 text-muted-foreground shrink-0" />}
                     </div>
-                    {u.handle && <p className="text-xs text-muted-foreground">@{u.handle}</p>}
                     {u.bio && <p className="text-xs text-muted-foreground/70 truncate mt-0.5">{u.bio}</p>}
                   </button>
                 </div>
@@ -1947,10 +2106,9 @@ function FollowingTab({ meId, onViewUserFeed }: {
                 <button type="button" className="text-left w-full"
                   onClick={() => setProfileTarget({ userId: u.id, name: u.name, handle: u.handle, image: u.image, sameHousehold: isHousehold })}>
                   <div className="flex items-center gap-1.5">
-                    <p className="text-sm font-semibold truncate hover:text-primary transition-colors">{u.name ?? u.handle ?? 'User'}</p>
+                    <p className="text-sm font-semibold truncate hover:text-primary transition-colors">{u.handle ? '@' + u.handle : u.name ?? 'User'}</p>
                     {isHousehold && <Users className="h-3 w-3 text-muted-foreground shrink-0" />}
                   </div>
-                  {u.handle && <p className="text-xs text-muted-foreground">@{u.handle}</p>}
                 </button>
               )}
             </div>
@@ -1958,7 +2116,7 @@ function FollowingTab({ meId, onViewUserFeed }: {
             <div className="flex items-center gap-1.5 shrink-0">
               {!isPrivate && (
                 <button type="button"
-                  onClick={() => onViewUserFeed(u.id, u.name ?? u.handle)}
+                  onClick={() => onViewUserFeed(u.id, u.handle ?? u.name)}
                   className="flex items-center gap-1 text-[11px] font-medium rounded-full border border-border/60 px-2.5 py-1 hover:bg-accent transition-colors text-muted-foreground hover:text-foreground">
                   <LayoutList className="h-3 w-3" />Posts
                 </button>

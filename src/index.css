@@ -209,6 +209,11 @@
   color: #fef3c7 !important;
 }
 
+@keyframes confetti-fall {
+  0%   { transform: translateY(-10px) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -232,5 +237,27 @@
     @apply bg-background text-foreground antialiased;
     font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', Roboto, 'Helvetica Neue', Arial, sans-serif;
     font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  select {
+    accent-color: var(--primary);
+  }
+
+  /* Default option — white bg / dark text in light, dark-navy bg / light text in dark */
+  select option {
+    background-color: var(--popover);
+    color: var(--popover-foreground);
+  }
+
+  /* Selected option — primary color (blue in light / orange in dark) */
+  select option:checked {
+    background-color: var(--primary);
+    color: var(--primary-foreground);
+  }
+
+  /* Hover option (Firefox supports this; Chrome/Safari use OS styling) */
+  select option:hover {
+    background-color: color-mix(in oklch, var(--primary) 20%, var(--popover));
+    color: var(--primary);
   }
 }

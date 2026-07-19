@@ -105,7 +105,7 @@ function OnboardingPage() {
     mutationFn: (name: string) => api.post('/api/households', { name }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.household.mine() });
-      void navigate({ to: '/' });
+      void navigate({ to: '/recipes' });
     },
     onError: (err) => {
       toast.error(err instanceof ApiError ? err.message : 'Failed to create household');
@@ -116,7 +116,7 @@ function OnboardingPage() {
     mutationFn: (id: string) => api.post(`/api/households/join-requests/${id}/accept`),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.household.mine() });
-      void navigate({ to: '/' });
+      void navigate({ to: '/recipes' });
     },
     onError: (err) => {
       toast.error(err instanceof ApiError ? err.message : 'Failed to accept invite');
@@ -339,7 +339,7 @@ function OnboardingPage() {
                         <p className="text-muted-foreground text-xs">
                           Invited by{' '}
                           <span className="text-foreground">
-                            {invite.fromName ?? invite.fromHandle ?? 'someone'}
+                            {invite.fromHandle ? `@${invite.fromHandle}` : invite.fromName ?? 'someone'}
                           </span>
                         </p>
                       </div>
