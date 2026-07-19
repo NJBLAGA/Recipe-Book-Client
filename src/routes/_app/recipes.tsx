@@ -1,12 +1,13 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   BookOpenText, Plus, Search, X, ChevronLeft, ChevronRight,
   Star, Pencil, Trash2, ArrowUp, ArrowDown, Minus, Camera,
-  Link2, UtensilsCrossed, ShoppingCart, AlertCircle,
+  Link2, UtensilsCrossed, ShoppingCart, AlertCircle, History,
   Check, ChefHat, ChevronDown, ChevronUp, Loader2, SlidersHorizontal,
   FileText, Tag, ArrowRight, ImagePlus, Maximize2, Square, CheckSquare,
+  CheckCircle2, XCircle, Clock,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,9 @@ import { useMeasureSystem } from '@/hooks/useMeasureSystem';
 import type { MeasureSystem } from '@/hooks/useMeasureSystem';
 
 export const Route = createFileRoute('/_app/recipes')({
+  validateSearch: (search: Record<string, unknown>) => ({
+    openRecipeId: typeof search.openRecipeId === 'string' ? search.openRecipeId : undefined,
+  }),
   component: RecipesPage,
 });
 
@@ -43,17 +47,23 @@ interface Ingredient {
 
 interface RecipeImage { id: string; url: string; sortOrder: number; }
 
+interface RecipeStep { text: string; subSteps: string[]; }
+
 interface RecipeDetail extends Omit<RecipeSummary, 'images'> {
-  steps: string[]; sharedByUserId: string | null; originalRecipeId: string | null;
+  steps: RecipeStep[]; sharedByUserId: string | null; originalRecipeId: string | null;
   ingredients: Ingredient[]; images: RecipeImage[];
 }
 
-interface PantryBatch { id: string; fillLevel: number; }
-interface PantryItemSummary {
-  id: string; ingredientId: string; ingredientName: string; effectiveStock: number;
-  batches: PantryBatch[];
+interface CookHistoryEntry {
+  id: string; recipeId: string | null; recipeTitle: string | null;
+  recipeImage: string | null; userId: string; userName: string | null;
+  userHandle: string | null; userImage: string | null;
+  servings: number | null; note: string | null; cookedAt: string;
 }
-type FillLevel = 0 | 25 | 50 | 75 | 100;
+
+interface PantryItemSummary {
+  id: string; ingredientId: string; ingredientName: string; inStock: boolean;
+}
 
 interface CookSession {
   id: string;
@@ -62,8 +72,8 @@ interface CookSession {
   pendingChanges: {
     ticked: string[];
     tickedSteps: number[];
-    pantryChanges: { batchId: string; newFillLevel: number }[];
-    extraChanges: { batchId: string; newFillLevel: number }[];
+    pantryChanges: { itemId: string; inStock: boolean }[];
+    extraChanges: { itemId: string; inStock: boolean }[];
   } | null;
   resumed: boolean;
 }
@@ -134,23 +144,30 @@ function convertStepText(step: string, system: MeasureSystem): string {
     });
 }
 
-function pantryStatus(ingredientId: string, pantryMap: Map<string, number>): 'in-stock' | 'low' | 'missing' {
-  if (!pantryMap.has(ingredientId)) return 'missing';
-  const stock = pantryMap.get(ingredientId)!;
-  if (stock === 0) return 'missing';
-  if (stock <= 25) return 'low';
-  return 'in-stock';
+const LEADING_ADJECTIVES = new Set([
+  'ripe','fresh','dried','ground','chopped','minced','sliced','diced','grated','peeled',
+  'frozen','canned','raw','cooked','large','small','medium','big','whole','half',
+  'boneless','skinless','lean','extra','finely','roughly','thinly','thick','thin',
+  'hot','cold','warm','sweet','sour','bitter','spicy','mild','heavy','light',
+  'soft','firm','hard','tender','crispy','crunchy','plain','unsalted','salted',
+  'crushed','flaked','packed','reduced','low-fat','skim','full-fat',
+]);
+
+function simplifyIngredientName(name: string): string {
+  const words = name.trim().split(/\s+/);
+  let start = 0;
+  while (start < words.length - 1 && LEADING_ADJECTIVES.has(words[start].toLowerCase())) start++;
+  return words.slice(start).join(' ');
 }
 
-function PantryDot({ status }: { status: 'in-stock' | 'low' | 'missing' }) {
-  return (
-    <span className={cn(
-      'inline-block h-2 w-2 rounded-full shrink-0',
-      status === 'in-stock' && 'bg-emerald-500',
-      status === 'low' && 'bg-amber-400',
-      status === 'missing' && 'bg-rose-500',
-    )} />
-  );
+function pantryStatus(ingredientId: string, pantryMap: Map<string, boolean>): 'in-stock' | 'missing' {
+  return pantryMap.get(ingredientId) ? 'in-stock' : 'missing';
+}
+
+function PantryIcon({ status }: { status: 'in-stock' | 'missing' }) {
+  return status === 'in-stock'
+    ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+    : <XCircle className="h-4 w-4 shrink-0 text-rose-500" />;
 }
 
 function StarDisplay({ rating }: { rating: number }) {
@@ -188,33 +205,51 @@ function extractedToRows(ings: ExtractedRecipe['ingredients']): Array<Ingredient
 
 // ─── Confetti ─────────────────────────────────────────────────────────────────
 
-const CONFETTI_COLORS = ['#FF6B6B', '#4ECDC4', '#FFE66D', '#A8E6CF', '#FF8B94', '#6C5CE7', '#74B9FF', '#FD79A8'];
+const CONFETTI_COLORS = ['#f97316','#eab308','#22c55e','#06b6d4','#8b5cf6','#ec4899','#ef4444','#3b82f6','#10b981','#f59e0b'];
+
+const CONFETTI_SHAPES = ['rect', 'circle', 'strip'] as const;
 
 function Confetti() {
   const pieces = useMemo(() =>
-    Array.from({ length: 60 }, (_, i) => ({
+    Array.from({ length: 80 }, (_, i) => ({
       id: i,
-      x: Math.random() * 100,
-      delay: Math.random() * 0.8,
-      color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
-      size: Math.random() * 8 + 5,
-      duration: 1.5 + Math.random() * 0.8,
+      x: Math.random() * 110 - 5,
+      delay: Math.random() * 1.2,
+      color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+      width: Math.random() * 10 + 6,
+      height: Math.random() * 14 + 6,
+      rotation: Math.random() * 360,
+      drift: (Math.random() - 0.5) * 120,
+      duration: 1.8 + Math.random() * 1.4,
+      shape: CONFETTI_SHAPES[Math.floor(Math.random() * 3)],
     })),
   []);
+
   return (
-    <div className="fixed inset-0 z-[500] pointer-events-none overflow-hidden">
-      {pieces.map((p) => (
-        <div key={p.id} className="absolute rounded-sm"
-          style={{
-            left: `${p.x}%`,
-            top: 0,
-            width: `${p.size}px`,
-            height: `${p.size}px`,
-            backgroundColor: p.color,
-            animation: `confetti-fall ${p.duration}s ease-in ${p.delay}s forwards`,
-          }} />
-      ))}
-    </div>
+    <>
+      <style>{`
+        @keyframes confetti-drop {
+          0% { transform: translateY(-20px) translateX(0) rotate(var(--rot)); opacity: 1; }
+          100% { transform: translateY(100vh) translateX(var(--drift)) rotate(calc(var(--rot) + 720deg)); opacity: 0; }
+        }
+      `}</style>
+      <div className="fixed inset-0 z-[500] pointer-events-none overflow-hidden">
+        {pieces.map((p) => (
+          <div key={p.id}
+            className={cn('absolute', p.shape === 'circle' ? 'rounded-full' : p.shape === 'strip' ? 'rounded-sm' : 'rounded-[2px]')}
+            style={{
+              left: `${p.x}%`,
+              top: 0,
+              width: p.shape === 'strip' ? `${p.width * 0.4}px` : `${p.width}px`,
+              height: p.shape === 'strip' ? `${p.height * 2}px` : `${p.height}px`,
+              backgroundColor: p.color,
+              '--rot': `${p.rotation}deg`,
+              '--drift': `${p.drift}px`,
+              animation: `confetti-drop ${p.duration}s cubic-bezier(0.25,0.46,0.45,0.94) ${p.delay}s forwards`,
+            } as React.CSSProperties} />
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -289,7 +324,7 @@ interface RecipeFormState {
   description: string;
   baseServings: string;
   categoryId: string;
-  steps: string[];
+  steps: RecipeStep[];
   ingredients: Array<IngredientRow & { sortOrder: number }>;
 }
 
@@ -320,12 +355,14 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
   const scanFileInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
+  const emptyStep = (): RecipeStep => ({ text: '', subSteps: [] });
+
   const [form, setForm] = useState<RecipeFormState>(() => ({
     title: initial?.title ?? '',
     description: initial?.description ?? '',
     baseServings: initial?.baseServings ?? '4',
     categoryId: initial?.categoryId ?? '',
-    steps: initial?.steps?.length ? initial.steps : [''],
+    steps: initial?.steps?.length ? initial.steps : [emptyStep()],
     ingredients: initial?.ingredients?.length ? initial.ingredients : [emptyRow(0)],
   }));
 
@@ -336,7 +373,7 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
         description: initial?.description ?? '',
         baseServings: initial?.baseServings ?? '4',
         categoryId: initial?.categoryId ?? '',
-        steps: initial?.steps?.length ? initial.steps : [''],
+        steps: initial?.steps?.length ? initial.steps : [emptyStep()],
         ingredients: initial?.ingredients?.length ? initial.ingredients : [emptyRow(0)],
       });
       setMode(initialMode);
@@ -363,7 +400,7 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
       title: extracted.title || prev.title,
       description: extracted.description ?? prev.description,
       baseServings: String(extracted.baseServings),
-      steps: extracted.steps.length ? extracted.steps : prev.steps,
+      steps: extracted.steps.length ? extracted.steps.map((s) => ({ text: s, subSteps: [] })) : prev.steps,
       ingredients: extracted.ingredients.length ? extractedToRows(extracted.ingredients) : prev.ingredients,
     }));
     setScanPhase('done');
@@ -402,7 +439,7 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
         title: data.title || prev.title,
         description: data.description ?? prev.description,
         baseServings: String(data.baseServings),
-        steps: data.steps.length ? data.steps : prev.steps,
+        steps: data.steps.length ? data.steps.map((s) => ({ text: s, subSteps: [] })) : prev.steps,
         ingredients: data.ingredients.length ? extractedToRows(data.ingredients) : prev.ingredients,
       }));
       setUrlPhase('done');
@@ -423,7 +460,7 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
         title: data.title || prev.title,
         description: data.description ?? prev.description,
         baseServings: String(data.baseServings),
-        steps: data.steps.length ? data.steps : prev.steps,
+        steps: data.steps.length ? data.steps.map((s) => ({ text: s, subSteps: [] })) : prev.steps,
         ingredients: data.ingredients.length ? extractedToRows(data.ingredients) : prev.ingredients,
       }));
       setPastePhase('done');
@@ -498,7 +535,7 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
           sortOrder: i,
         }));
       if (ingredients.length === 0) throw new Error('At least one ingredient is required');
-      const steps = form.steps.filter((s) => s.trim());
+      const steps = form.steps.filter((s) => s.text.trim()).map((s) => ({ text: s.text.trim(), subSteps: s.subSteps.filter((ss) => ss.trim()) }));
       if (steps.length === 0) throw new Error('At least one step is required');
 
       if (!form.categoryId) throw new Error('Category is required');
@@ -581,11 +618,11 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
     });
   };
 
-  const setStep = (idx: number, val: string) => {
-    setForm((p) => { const s = [...p.steps]; s[idx] = val; return { ...p, steps: s }; });
+  const setStep = (idx: number, text: string) => {
+    setForm((p) => { const s = [...p.steps]; s[idx] = { ...s[idx], text }; return { ...p, steps: s }; });
   };
 
-  const addStep = () => setForm((p) => ({ ...p, steps: [...p.steps, ''] }));
+  const addStep = () => setForm((p) => ({ ...p, steps: [...p.steps, emptyStep()] }));
 
   const removeStep = (idx: number) => setForm((p) => ({
     ...p, steps: p.steps.filter((_, i) => i !== idx),
@@ -597,6 +634,32 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
       if (to < 0 || to >= p.steps.length) return p;
       const s = [...p.steps];
       [s[idx], s[to]] = [s[to], s[idx]];
+      return { ...p, steps: s };
+    });
+  };
+
+  const addSubStep = (stepIdx: number) => {
+    setForm((p) => {
+      const s = [...p.steps];
+      s[stepIdx] = { ...s[stepIdx], subSteps: [...s[stepIdx].subSteps, ''] };
+      return { ...p, steps: s };
+    });
+  };
+
+  const setSubStep = (stepIdx: number, subIdx: number, val: string) => {
+    setForm((p) => {
+      const s = [...p.steps];
+      const ss = [...s[stepIdx].subSteps];
+      ss[subIdx] = val;
+      s[stepIdx] = { ...s[stepIdx], subSteps: ss };
+      return { ...p, steps: s };
+    });
+  };
+
+  const removeSubStep = (stepIdx: number, subIdx: number) => {
+    setForm((p) => {
+      const s = [...p.steps];
+      s[stepIdx] = { ...s[stepIdx], subSteps: s[stepIdx].subSteps.filter((_, i) => i !== subIdx) };
       return { ...p, steps: s };
     });
   };
@@ -968,25 +1031,51 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
                     {/* Steps */}
                     <div className="space-y-2">
                       <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Steps *</label>
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         {form.steps.map((step, idx) => (
-                          <div key={idx} className="flex items-start gap-2">
-                            <div className="shrink-0 flex flex-col items-center gap-0.5 pt-2">
-                              <span className="text-[10px] font-bold text-muted-foreground w-5 text-center">{idx + 1}</span>
-                              <button type="button" onClick={() => moveStep(idx, -1)} disabled={idx === 0}
-                                className="disabled:opacity-25 hover:text-primary transition-colors">
-                                <ArrowUp className="h-3 w-3" />
-                              </button>
-                              <button type="button" onClick={() => moveStep(idx, 1)} disabled={idx === form.steps.length - 1}
-                                className="disabled:opacity-25 hover:text-primary transition-colors">
-                                <ArrowDown className="h-3 w-3" />
+                          <div key={idx} className="border rounded-lg p-3 space-y-2">
+                            <div className="flex items-start gap-2">
+                              <div className="shrink-0 flex flex-col items-center gap-0.5 pt-2">
+                                <span className="text-[10px] font-bold text-muted-foreground w-5 text-center">{idx + 1}</span>
+                                <button type="button" onClick={() => moveStep(idx, -1)} disabled={idx === 0}
+                                  className="disabled:opacity-25 hover:text-primary transition-colors">
+                                  <ArrowUp className="h-3 w-3" />
+                                </button>
+                                <button type="button" onClick={() => moveStep(idx, 1)} disabled={idx === form.steps.length - 1}
+                                  className="disabled:opacity-25 hover:text-primary transition-colors">
+                                  <ArrowDown className="h-3 w-3" />
+                                </button>
+                              </div>
+                              <Textarea className="resize-none text-sm flex-1 min-h-[64px]" placeholder={`Step ${idx + 1}…`}
+                                value={step.text} onChange={(e) => setStep(idx, e.target.value)} />
+                              <button type="button" onClick={() => removeStep(idx)}
+                                className="pt-2 shrink-0 text-muted-foreground hover:text-destructive transition-colors">
+                                <Minus className="h-4 w-4" />
                               </button>
                             </div>
-                            <Textarea className="resize-none text-sm flex-1 min-h-[64px]" placeholder={`Step ${idx + 1}…`}
-                              value={step} onChange={(e) => setStep(idx, e.target.value)} />
-                            <button type="button" onClick={() => removeStep(idx)}
-                              className="pt-2 shrink-0 text-muted-foreground hover:text-destructive transition-colors">
-                              <Minus className="h-4 w-4" />
+                            {/* Sub-steps */}
+                            {step.subSteps.length > 0 && (
+                              <div className="ml-7 space-y-1.5">
+                                {step.subSteps.map((ss, si) => (
+                                  <div key={si} className="flex items-center gap-2">
+                                    <span className="text-[10px] text-muted-foreground shrink-0">{String.fromCharCode(97 + si)}.</span>
+                                    <input
+                                      className="flex-1 text-sm border rounded px-2 py-1 bg-background"
+                                      placeholder={`Sub-step ${String.fromCharCode(97 + si)}…`}
+                                      value={ss}
+                                      onChange={(e) => setSubStep(idx, si, e.target.value)}
+                                    />
+                                    <button type="button" onClick={() => removeSubStep(idx, si)}
+                                      className="shrink-0 text-muted-foreground hover:text-destructive transition-colors">
+                                      <Minus className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            <button type="button" onClick={() => addSubStep(idx)}
+                              className="ml-7 text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
+                              <Plus className="h-3 w-3" />Add sub-step
                             </button>
                           </div>
                         ))}
@@ -1043,8 +1132,6 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
 
 // ─── Recipe Detail Modal ──────────────────────────────────────────────────────
 
-const FILL_LEVELS: FillLevel[] = [0, 25, 50, 75, 100];
-
 function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
   recipeId: string | null; open: boolean; onClose: () => void;
   onEdit: (r: RecipeDetail) => void; onDelete: (id: string) => void;
@@ -1064,15 +1151,23 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
   const [localStepsTicked, setLocalStepsTicked] = useState<Set<number>>(new Set());
   const [showComplete, setShowComplete] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
-  // Complete screen: batchId → new fill level
-  const [pendingFillChanges, setPendingFillChanges] = useState<Record<string, FillLevel>>({});
+  // Complete screen: pantryItem.id → inStock boolean
+  const [pendingStockChanges, setPendingStockChanges] = useState<Record<string, boolean>>({});
   const [shoppingAdditions, setShoppingAdditions] = useState<Set<string>>(new Set());
   const [completing, setCompleting] = useState(false);
   const saveTickRef = useRef<ReturnType<typeof setTimeout>>();
 
   const { data: recipe, isLoading } = useQuery({
     queryKey: queryKeys.recipeBook.recipe(recipeId ?? ''),
-    queryFn: () => api.get<RecipeDetail>(`/api/recipe-book/recipes/${recipeId}`),
+    queryFn: async () => {
+      const r = await api.get<RecipeDetail>(`/api/recipe-book/recipes/${recipeId}`);
+      return {
+        ...r,
+        steps: (r.steps as unknown as (RecipeStep | string)[]).map((s) =>
+          typeof s === 'string' ? { text: s, subSteps: [] } : s
+        ),
+      };
+    },
     enabled: open && !!recipeId,
   });
 
@@ -1098,15 +1193,37 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
     }
   }, [activeSession]);
 
-  const pantryMap = new Map(pantryItems.map((p) => [p.ingredientId, p.effectiveStock]));
+  const pantryMap = new Map(pantryItems.map((p) => [p.ingredientId, p.inStock]));
   const pantryByIngredientId = new Map(pantryItems.map((p) => [p.ingredientId, p]));
 
+  const { data: shoppingListItems = [] } = useQuery({
+    queryKey: queryKeys.shoppingList.items(),
+    queryFn: () => api.get<{ id: string; name: string }[]>('/api/shopping-list/items'),
+    enabled: open,
+  });
+
+  const [dupConfirm, setDupConfirm] = useState<{ name: string } | null>(null);
+
+  const doAddToShoppingList = (name: string) =>
+    api.post('/api/shopping-list/items', { name, source: 'RECIPE' });
+
   const addToShoppingList = useMutation({
-    mutationFn: ({ name, quantity, unit }: { name: string; quantity: string | null; unit: string | null }) =>
-      api.post('/api/shopping-list/items', { name, quantity: quantity ? parseFloat(quantity) : null, unit: unit || null, source: 'RECIPE' }),
+    mutationFn: ({ name }: { name: string }) => doAddToShoppingList(name),
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: queryKeys.shoppingList.items() }); toast.success('Added to shopping list'); },
     onError: (e) => toast.error(e instanceof ApiError ? e.message : 'Failed'),
   });
+
+  const handleAddToList = (ingName: string) => {
+    const simplified = simplifyIngredientName(ingName);
+    const alreadyOn = shoppingListItems.some(
+      (i) => i.name.toLowerCase() === simplified.toLowerCase()
+    );
+    if (alreadyOn) {
+      setDupConfirm({ name: simplified });
+    } else {
+      addToShoppingList.mutate({ name: simplified });
+    }
+  };
 
   const deleteMutation = useMutation({
     mutationFn: () => api.delete(`/api/recipe-book/recipes/${recipeId}`),
@@ -1122,7 +1239,7 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
   useEffect(() => {
     if (open) {
       setImgIdx(0); setLightboxIdx(null); setExpandedStep(null); setConfirmDelete(false);
-      setShowComplete(false); setShowConfetti(false); setPendingFillChanges({}); setShoppingAdditions(new Set());
+      setShowComplete(false); setShowConfetti(false); setPendingStockChanges({}); setShoppingAdditions(new Set());
     }
   }, [open, recipeId]);
 
@@ -1174,6 +1291,28 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
     });
   }, [cookSession, localTicked, persistTicked]);
 
+  const tickAllIngredients = useCallback(() => {
+    if (!cookSession || !recipe) return;
+    setLocalTicked((prev) => {
+      const allIds = recipe.ingredients.map((i) => i.ingredientId);
+      const allTicked = allIds.every((id) => prev.has(id));
+      const next = allTicked ? new Set<string>() : new Set(allIds);
+      persistTicked(cookSession, next, localStepsTicked);
+      return next;
+    });
+  }, [cookSession, recipe, localStepsTicked, persistTicked]);
+
+  const tickAllSteps = useCallback(() => {
+    if (!cookSession || !recipe) return;
+    setLocalStepsTicked((prev) => {
+      const allIdxs = recipe.steps.map((_, i) => i);
+      const allTicked = allIdxs.every((i) => prev.has(i));
+      const next = allTicked ? new Set<number>() : new Set(allIdxs);
+      persistTicked(cookSession, localTicked, next);
+      return next;
+    });
+  }, [cookSession, recipe, localTicked, persistTicked]);
+
   const startCooking = async () => {
     if (!recipe) return;
     setCookLoading(true);
@@ -1206,18 +1345,15 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
 
   const openCompleteScreen = () => {
     if (!recipe) return;
-    // Pre-populate fill levels from current pantry values
-    const initial: Record<string, FillLevel> = {};
+    // Pre-populate: ticked ingredients that are in pantry default to "still in stock"
+    const initial: Record<string, boolean> = {};
     for (const ingId of localTicked) {
       const pantryItem = pantryByIngredientId.get(ingId);
-      if (pantryItem?.batches.length) {
-        const batch = pantryItem.batches[0];
-        // Default to one level lower than current (encourage users to update)
-        const currentIdx = FILL_LEVELS.indexOf(batch.fillLevel as FillLevel);
-        initial[batch.id] = FILL_LEVELS[Math.max(0, currentIdx - 1)] as FillLevel;
+      if (pantryItem) {
+        initial[pantryItem.id] = pantryItem.inStock;
       }
     }
-    setPendingFillChanges(initial);
+    setPendingStockChanges(initial);
     setShoppingAdditions(new Set());
     setShowComplete(true);
   };
@@ -1226,7 +1362,7 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
     if (!cookSession) return;
     setCompleting(true);
     try {
-      const pantryChanges = Object.entries(pendingFillChanges).map(([batchId, newFillLevel]) => ({ batchId, newFillLevel }));
+      const pantryChanges = Object.entries(pendingStockChanges).map(([itemId, inStock]) => ({ itemId, inStock }));
       await api.post(`/api/cook-sessions/${cookSession.id}/complete`, { pantryChanges });
 
       // Add shopping list items
@@ -1364,15 +1500,15 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
                 onValueChange={([v]) => setServings(v)} className="py-0" />
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-muted-foreground">Base: {base} servings</span>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center rounded-full border p-0.5 bg-muted/30">
                   <button type="button" onClick={() => setSystem('metric')}
-                    className={cn('text-[10px] px-2 py-0.5 rounded-full border transition-colors',
-                      system === 'metric' ? 'bg-primary text-primary-foreground border-primary' : 'text-muted-foreground')}>
+                    className={cn('text-[10px] px-2.5 py-0.5 rounded-full transition-colors font-medium',
+                      system === 'metric' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}>
                     Metric
                   </button>
                   <button type="button" onClick={() => setSystem('imperial')}
-                    className={cn('text-[10px] px-2 py-0.5 rounded-full border transition-colors',
-                      system === 'imperial' ? 'bg-primary text-primary-foreground border-primary' : 'text-muted-foreground')}>
+                    className={cn('text-[10px] px-2.5 py-0.5 rounded-full transition-colors font-medium',
+                      system === 'imperial' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}>
                     Imperial
                   </button>
                 </div>
@@ -1392,17 +1528,26 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
         {!isLoading && recipe && (
           <div className="flex-1 overflow-y-auto scrollbar-hide">
             <div className="p-4 space-y-5">
-              <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-                <span className="flex items-center gap-1"><PantryDot status="in-stock" />In stock</span>
-                <span className="flex items-center gap-1"><PantryDot status="low" />Running low</span>
-                <span className="flex items-center gap-1"><PantryDot status="missing" />Not in pantry</span>
-              </div>
+              {!isCooking && (
+                <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                  <span className="flex items-center gap-1"><PantryIcon status="in-stock" />In stock</span>
+                  <span className="flex items-center gap-1"><PantryIcon status="missing" />Out of stock</span>
+                </div>
+              )}
 
               <div className="space-y-2">
-                <h3 className="text-sm font-semibold">Ingredients</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold">Ingredients</h3>
+                  {isCooking && (
+                    <button type="button" onClick={tickAllIngredients}
+                      className="text-[11px] text-muted-foreground hover:text-primary transition-colors">
+                      {recipe.ingredients.every((i) => localTicked.has(i.ingredientId)) ? 'Untick all' : 'Tick all'}
+                    </button>
+                  )}
+                </div>
                 <div className="space-y-1.5">
                   {recipe.ingredients.map((ing) => {
-                    const status = ing.quantity ? pantryStatus(ing.ingredientId, pantryMap) : null;
+                    const status = pantryStatus(ing.ingredientId, pantryMap);
                     const scaled = scaleQty(ing.quantity, base, effective);
                     const converted = convertQty(scaled, ing.unit, system);
                     const ticked = localTicked.has(ing.ingredientId);
@@ -1419,10 +1564,7 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
                               : <Square className="h-4 w-4 text-muted-foreground" />}
                           </button>
                         ) : (
-                          <>
-                            {status && <PantryDot status={status} />}
-                            {!status && <span className="inline-block h-2 w-2 rounded-full bg-muted-foreground/20 shrink-0" />}
-                          </>
+                          <PantryIcon status={status} />
                         )}
                         <div className="flex-1 min-w-0">
                           <span className={cn('text-sm', ticked && 'line-through')}>
@@ -1433,7 +1575,7 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
                         </div>
                         {!isCooking && (
                           <button type="button" title="Add to shopping list"
-                            onClick={() => addToShoppingList.mutate({ name: ing.name, quantity: scaled, unit: ing.unit })}
+                            onClick={() => handleAddToList(ing.name)}
                             className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-accent transition-colors text-muted-foreground hover:text-foreground shrink-0">
                             <ShoppingCart className="h-3 w-3" />
                           </button>
@@ -1445,10 +1587,19 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
               </div>
 
               <div className="space-y-2">
-                <h3 className="text-sm font-semibold">Method</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold">Method</h3>
+                  {isCooking && (
+                    <button type="button" onClick={tickAllSteps}
+                      className="text-[11px] text-muted-foreground hover:text-primary transition-colors">
+                      {recipe.steps.every((_, i) => localStepsTicked.has(i)) ? 'Untick all' : 'Tick all'}
+                    </button>
+                  )}
+                </div>
                 <div className="space-y-2">
                   {recipe.steps.map((step, i) => {
-                    const converted = convertStepText(step, system);
+                    const converted = convertStepText(step.text, system);
+                    const hasSubSteps = step.subSteps.length > 0;
                     const isExpanded = expandedStep === i;
                     const stepTicked = localStepsTicked.has(i);
                     return (
@@ -1466,17 +1617,24 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
                               {i + 1}
                             </span>
                           )}
-                          <button type="button" className="flex-1 text-left"
-                            onClick={() => setExpandedStep(isExpanded ? null : i)}>
-                            <p className={cn('text-sm leading-relaxed', !isExpanded && 'line-clamp-2', stepTicked && 'line-through')}>{converted}</p>
-                          </button>
-                          {converted.length > 80 && (
+                          <p className={cn('flex-1 text-sm leading-relaxed', stepTicked && 'line-through')}>{converted}</p>
+                          {hasSubSteps && (
                             <button type="button" onClick={() => setExpandedStep(isExpanded ? null : i)}
                               className="shrink-0 mt-1 text-muted-foreground">
                               {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                             </button>
                           )}
                         </div>
+                        {hasSubSteps && isExpanded && (
+                          <div className="px-3 pb-3 ml-9 space-y-1.5">
+                            {step.subSteps.map((ss, si) => (
+                              <div key={si} className="flex items-start gap-2 text-sm text-muted-foreground">
+                                <span className="shrink-0 text-xs font-medium mt-0.5">{String.fromCharCode(97 + si)}.</span>
+                                <span>{ss}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1534,39 +1692,38 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
             </div>
 
             <div className="flex-1 overflow-y-auto scrollbar-hide p-4 space-y-4">
-              {/* Pantry deductions */}
+              {/* Pantry stock update — in/out of stock toggles */}
               {(() => {
                 const pantryIngredients = recipe.ingredients.filter(
                   (ing) => localTicked.has(ing.ingredientId) && pantryByIngredientId.has(ing.ingredientId)
                 );
                 if (pantryIngredients.length > 0) return (
                   <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Update Pantry Stock</p>
-                    <p className="text-[11px] text-muted-foreground">Set the new fill level for ingredients you used.</p>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Update Pantry</p>
+                    <p className="text-[11px] text-muted-foreground">Confirm the stock status after cooking.</p>
                     {pantryIngredients.map((ing) => {
-                      const pantryItem = pantryByIngredientId.get(ing.ingredientId)!;
-                      const batch = pantryItem.batches[0];
-                      if (!batch) return null;
-                      const currentLevel = pendingFillChanges[batch.id] ?? (batch.fillLevel as FillLevel);
+                      const pi = pantryByIngredientId.get(ing.ingredientId)!;
+                      const currentStock = pendingStockChanges[pi.id] ?? pi.inStock;
                       return (
                         <div key={ing.id} className="rounded-xl border bg-card p-3 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium">{ing.name}</span>
-                            <span className="text-xs text-muted-foreground">was {batch.fillLevel}%</span>
-                          </div>
-                          <div className="flex gap-1.5">
-                            {FILL_LEVELS.map((level) => (
-                              <button key={level} type="button"
-                                onClick={() => setPendingFillChanges((p) => ({ ...p, [batch.id]: level }))}
-                                className={cn(
-                                  'flex-1 h-8 rounded-lg text-xs font-semibold border transition-colors',
-                                  currentLevel === level
-                                    ? 'bg-primary text-primary-foreground border-primary'
-                                    : 'text-muted-foreground hover:bg-accent hover:text-foreground',
-                                )}>
-                                {level}%
-                              </button>
-                            ))}
+                          <span className="text-sm font-medium">{ing.name}</span>
+                          <div className="flex items-center gap-2 rounded-xl border p-0.5 bg-muted/30 w-fit">
+                            <button type="button"
+                              onClick={() => setPendingStockChanges((p) => ({ ...p, [pi.id]: true }))}
+                              className={cn(
+                                'px-3 py-1 rounded-lg text-xs font-semibold transition-colors',
+                                currentStock ? 'bg-emerald-500 text-white' : 'text-muted-foreground hover:text-foreground',
+                              )}>
+                              Still have it
+                            </button>
+                            <button type="button"
+                              onClick={() => setPendingStockChanges((p) => ({ ...p, [pi.id]: false }))}
+                              className={cn(
+                                'px-3 py-1 rounded-lg text-xs font-semibold transition-colors',
+                                !currentStock ? 'bg-rose-500 text-white' : 'text-muted-foreground hover:text-foreground',
+                              )}>
+                              Used it all
+                            </button>
                           </div>
                         </div>
                       );
@@ -1576,20 +1733,18 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
                 return null;
               })()}
 
-              {/* Shopping list additions for pantry items now low */}
+              {/* Out-of-stock after cook → shopping list */}
               {(() => {
-                const lowAfterCook = recipe.ingredients.filter((ing) => {
+                const outOfStock = recipe.ingredients.filter((ing) => {
                   if (!localTicked.has(ing.ingredientId)) return false;
-                  const pantryItem = pantryByIngredientId.get(ing.ingredientId);
-                  if (!pantryItem?.batches[0]) return false;
-                  const batch = pantryItem.batches[0];
-                  const newLevel = pendingFillChanges[batch.id] ?? batch.fillLevel;
-                  return newLevel <= 25;
+                  const pi = pantryByIngredientId.get(ing.ingredientId);
+                  if (!pi) return false;
+                  return !(pendingStockChanges[pi.id] ?? pi.inStock);
                 });
-                if (lowAfterCook.length > 0) return (
+                if (outOfStock.length > 0) return (
                   <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Running Low — Add to Shopping List?</p>
-                    {lowAfterCook.map((ing) => (
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Out of Stock — Add to Shopping List?</p>
+                    {outOfStock.map((ing) => (
                       <button key={ing.id} type="button"
                         onClick={() => setShoppingAdditions((p) => {
                           const n = new Set(p);
@@ -1703,6 +1858,30 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
 
     {/* Confetti overlay */}
     {showConfetti && <Confetti />}
+
+    {/* Duplicate shopping list confirm */}
+    <Dialog open={!!dupConfirm} onOpenChange={(o) => !o && setDupConfirm(null)}>
+      <DialogContent className="w-[calc(100vw-32px)] max-w-sm p-0 gap-0" hideClose>
+        <div className="flex items-center justify-between px-4 py-3 border-b">
+          <h3 className="font-semibold text-sm">Already on Shopping List</h3>
+          <DialogClose className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-accent transition-colors">
+            <X className="h-4 w-4" />
+          </DialogClose>
+        </div>
+        <div className="px-4 py-4 space-y-4">
+          <p className="text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">{dupConfirm?.name}</span> is already on your shopping list. Add it again anyway?
+          </p>
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={() => setDupConfirm(null)}>Skip</Button>
+            <Button className="flex-1" onClick={() => {
+              if (dupConfirm) addToShoppingList.mutate({ name: dupConfirm.name });
+              setDupConfirm(null);
+            }}>Add Again</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
     </>
   );
 }
@@ -1949,9 +2128,79 @@ function RecipeCard({ recipe, onClick }: { recipe: RecipeSummary; onClick: () =>
 
 type SortBy = 'alpha' | 'z-alpha' | 'newest' | 'oldest';
 
+// ─── Cooking History Tab ──────────────────────────────────────────────────────
+
+function CookingHistoryTab({ entries, isLoading }: { entries: CookHistoryEntry[]; isLoading: boolean }) {
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-16">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary/30 border-t-transparent" />
+      </div>
+    );
+  }
+  if (entries.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-16 text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
+          <Clock className="h-6 w-6 text-muted-foreground" />
+        </div>
+        <div>
+          <p className="font-semibold text-sm">No cooking history yet</p>
+          <p className="text-xs text-muted-foreground mt-1">Completed cook sessions will appear here.</p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      {entries.map((entry) => (
+        <div key={entry.id} className="rounded-xl border bg-card overflow-hidden flex gap-3 p-3">
+          {entry.recipeImage ? (
+            <img src={entry.recipeImage} alt={entry.recipeTitle ?? ''} className="h-16 w-16 rounded-lg object-cover shrink-0" />
+          ) : (
+            <div className="h-16 w-16 rounded-lg bg-muted shrink-0 flex items-center justify-center">
+              <ChefHat className="h-6 w-6 text-muted-foreground" />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-sm truncate">{entry.recipeTitle ?? 'Deleted recipe'}</p>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              {entry.userImage ? (
+                <img src={entry.userImage} alt="" className="h-5 w-5 rounded-full object-cover" />
+              ) : (
+                <div className="h-5 w-5 rounded-full bg-muted flex items-center justify-center shrink-0">
+                  <span className="text-[9px] font-bold text-muted-foreground">
+                    {(entry.userName ?? entry.userHandle ?? '?')[0].toUpperCase()}
+                  </span>
+                </div>
+              )}
+              <span className="text-xs text-muted-foreground truncate">
+                {entry.userName ?? entry.userHandle ?? 'Unknown'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 mt-1.5 text-[11px] text-muted-foreground">
+              <span>{new Date(entry.cookedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+              {entry.servings && (
+                <>
+                  <span className="opacity-40">·</span>
+                  <span>{entry.servings} serving{entry.servings !== 1 ? 's' : ''}</span>
+                </>
+              )}
+            </div>
+            {entry.note && <p className="mt-1 text-xs text-muted-foreground italic truncate">"{entry.note}"</p>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 function RecipesPage() {
+  const navigate = useNavigate();
+  const { openRecipeId } = Route.useSearch();
+  const [activeTab, setActiveTab] = useState<'recipes' | 'history'>('recipes');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
@@ -1988,6 +2237,12 @@ function RecipesPage() {
     enabled: canMakeFilter === 'can-make',
   });
 
+  const { data: cookHistory = [], isLoading: historyLoading } = useQuery({
+    queryKey: ['cook-sessions', 'household-history'],
+    queryFn: () => api.get<CookHistoryEntry[]>('/api/cook-sessions/household-history'),
+    enabled: activeTab === 'history',
+  });
+
   const canMakeIds = canMake
     ? new Set([...canMake.ready.map((r) => r.id), ...canMake.almost.map((r) => r.id)])
     : null;
@@ -2006,6 +2261,14 @@ function RecipesPage() {
   });
 
   const hasActiveFilters = activeCategoryId !== null || sortBy !== 'alpha' || canMakeFilter !== 'all';
+
+  // Open a specific recipe modal when navigated here with ?openRecipeId=...
+  useEffect(() => {
+    if (openRecipeId) {
+      setSelectedRecipeId(openRecipeId);
+      void navigate({ to: '/recipes', search: {}, replace: true });
+    }
+  }, [openRecipeId]);
 
   const handleSearch = (val: string) => {
     setSearch(val);
@@ -2052,9 +2315,32 @@ function RecipesPage() {
           <BookOpenText className="h-5 w-5 text-primary shrink-0" />
           <h1 className="text-xl font-bold">Recipe Book</h1>
         </div>
-        <p className="text-sm text-muted-foreground mb-5 leading-relaxed">
+        <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
           Your household's shared collection. Browse, search, and filter everything your household has saved.
         </p>
+
+        {/* Tabs */}
+        <div className="flex rounded-xl border border-border/60 bg-muted/40 p-1 gap-1 mb-5">
+          {([
+            { id: 'recipes' as const, label: 'Recipe Book', icon: BookOpenText },
+            { id: 'history' as const, label: 'Cooking History', icon: History },
+          ] as const).map(({ id, label, icon: Icon }) => (
+            <button key={id} type="button"
+              onClick={() => setActiveTab(id)}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition-all',
+                activeTab === id
+                  ? 'bg-card shadow-sm text-foreground'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}>
+              <Icon className="h-3.5 w-3.5" />{label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'history' ? (
+          <CookingHistoryTab entries={cookHistory} isLoading={historyLoading} />
+        ) : (<>
 
         {/* Search + Filter — 50/50 on all devices */}
         <div className="flex gap-2 mb-2">
@@ -2114,9 +2400,9 @@ function RecipesPage() {
                 </Select>
               </div>
 
-              {/* Ingredients */}
+              {/* Can-make filter */}
               <div className="space-y-1.5">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Ingredients</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Pantry Match</p>
                 <Select value={canMakeFilter} onValueChange={(v) => setCanMakeFilter(v as 'all' | 'can-make')}>
                   <SelectTrigger className={cn('h-9 w-full text-sm', canMakeFilter !== 'all' ? 'bg-primary/15 text-primary border-primary/20 font-medium' : '')}>
                     <SelectValue />
@@ -2127,7 +2413,7 @@ function RecipesPage() {
                   </SelectContent>
                 </Select>
                 {canMakeFilter === 'can-make' && (
-                  <p className="text-[10px] text-muted-foreground">Showing recipes you can cook based on your pantry stock.</p>
+                  <p className="text-[10px] text-muted-foreground">Recipes you can cook based on your pantry stock.</p>
                 )}
               </div>
 
@@ -2213,6 +2499,7 @@ function RecipesPage() {
             ))}
           </div>
         )}
+        </>)}
       </div>
 
       <RecipeDetailModal

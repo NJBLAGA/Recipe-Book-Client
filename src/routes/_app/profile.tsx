@@ -964,10 +964,18 @@ function PinViewModal({ slot, open, onClose }: { slot: PinSlot; open: boolean; o
                 <h2 className="text-base font-bold leading-tight">{recipe.title}</h2>
                 {recipe.categoryName && <p className="text-xs text-muted-foreground mt-0.5">{recipe.categoryName}</p>}
               </div>
-              <button type="button" onClick={() => setSystem((s) => s === 'metric' ? 'imperial' : 'metric')}
-                className="flex items-center gap-1.5 text-[11px] font-medium rounded-full border px-2.5 py-1 transition-colors shrink-0 hover:bg-accent">
-                <Scale className="h-3 w-3" />{system === 'metric' ? 'Metric' : 'Imperial'}
-              </button>
+              <div className="flex items-center rounded-full border p-0.5 bg-muted/30 shrink-0">
+                <button type="button" onClick={() => setSystem('metric')}
+                  className={cn('text-[10px] px-2.5 py-0.5 rounded-full transition-colors font-medium',
+                    system === 'metric' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}>
+                  Metric
+                </button>
+                <button type="button" onClick={() => setSystem('imperial')}
+                  className={cn('text-[10px] px-2.5 py-0.5 rounded-full transition-colors font-medium',
+                    system === 'imperial' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}>
+                  Imperial
+                </button>
+              </div>
             </div>
             {recipe.description && <p className="text-sm text-foreground/80 leading-relaxed">{recipe.description}</p>}
             <div className="space-y-1.5">
@@ -1528,10 +1536,18 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
                 <h2 className="text-base font-bold leading-tight">{detail.title}</h2>
                 {detail.categoryName && <p className="text-xs text-muted-foreground mt-0.5">{detail.categoryName}</p>}
               </div>
-              <button type="button" onClick={() => setSystem((s) => s === 'metric' ? 'imperial' : 'metric')}
-                className="flex items-center gap-1.5 text-[11px] font-medium rounded-full border px-2.5 py-1 transition-colors shrink-0 hover:bg-accent">
-                <Scale className="h-3 w-3" />{system === 'metric' ? 'Metric' : 'Imperial'}
-              </button>
+              <div className="flex items-center rounded-full border p-0.5 bg-muted/30 shrink-0">
+                <button type="button" onClick={() => setSystem('metric')}
+                  className={cn('text-[10px] px-2.5 py-0.5 rounded-full transition-colors font-medium',
+                    system === 'metric' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}>
+                  Metric
+                </button>
+                <button type="button" onClick={() => setSystem('imperial')}
+                  className={cn('text-[10px] px-2.5 py-0.5 rounded-full transition-colors font-medium',
+                    system === 'imperial' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}>
+                  Imperial
+                </button>
+              </div>
             </div>
             {detail.description && <p className="text-sm text-foreground/80 leading-relaxed">{detail.description}</p>}
             <div className="space-y-1.5">
@@ -2284,11 +2300,18 @@ function ShareRecipeViewModal({ share, open, onClose, onCopy }: {
                     <span className="text-xs text-muted-foreground">Servings</span>
                     <span className="text-xs font-semibold">{servings}</span>
                   </div>
-                  <button type="button"
-                    onClick={() => setSystem(s => s === 'metric' ? 'imperial' : 'metric')}
-                    className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground hover:text-foreground border border-border/60 rounded-md px-2 py-1 transition-colors shrink-0">
-                    <Scale className="h-3 w-3" />{system === 'metric' ? 'Metric' : 'Imperial'}
-                  </button>
+                  <div className="flex items-center rounded-full border p-0.5 bg-muted/30 shrink-0">
+                    <button type="button" onClick={() => setSystem('metric')}
+                      className={cn('text-[10px] px-2 py-0.5 rounded-full transition-colors font-medium',
+                        system === 'metric' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}>
+                      Metric
+                    </button>
+                    <button type="button" onClick={() => setSystem('imperial')}
+                      className={cn('text-[10px] px-2 py-0.5 rounded-full transition-colors font-medium',
+                        system === 'imperial' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}>
+                      Imperial
+                    </button>
+                  </div>
                 </div>
                 <Slider
                   min={1} max={20} step={1}
