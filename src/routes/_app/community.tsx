@@ -59,9 +59,13 @@ interface RecipeIngredient {
   note: string | null; sortOrder: number;
 }
 
+interface RecipeStep {
+  text: string; subSteps: string[];
+}
+
 interface RecipeDetail {
   id: string; title: string; description: string | null;
-  baseServings: number; steps: string[]; categoryName: string | null;
+  baseServings: number; steps: RecipeStep[]; categoryName: string | null;
   ingredients: RecipeIngredient[];
   images: { url: string; sortOrder: number }[];
 }
@@ -536,7 +540,7 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
                     {detail.steps.map((step, i) => (
                       <div key={i} className="flex gap-3 text-sm">
                         <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-bold leading-none mt-0.5">{i + 1}</span>
-                        <p className="leading-relaxed flex-1">{convertStepText(step, system)}</p>
+                        <p className="leading-relaxed flex-1">{convertStepText(step.text, system)}</p>
                       </div>
                     ))}
                   </div>
@@ -1047,7 +1051,7 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
                         <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-bold leading-none mt-0.5">
                           {i + 1}
                         </span>
-                        <p className="leading-relaxed flex-1">{convertStepText(step, system)}</p>
+                        <p className="leading-relaxed flex-1">{convertStepText(step.text, system)}</p>
                       </div>
                     ))}
                   </div>
@@ -1339,7 +1343,7 @@ function CreatePostModal({ open, onClose }: { open: boolean; onClose: () => void
                         {previewDetail.steps.map((step, i) => (
                           <div key={i} className="flex gap-3 text-sm">
                             <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-bold leading-none mt-0.5">{i + 1}</span>
-                            <p className="leading-relaxed flex-1">{convertStepText(step, previewSystem)}</p>
+                            <p className="leading-relaxed flex-1">{convertStepText(step.text, previewSystem)}</p>
                           </div>
                         ))}
                       </div>

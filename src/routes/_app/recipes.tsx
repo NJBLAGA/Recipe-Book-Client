@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import ReactConfetti from 'react-confetti';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   BookOpenText, Plus, Search, X, ChevronLeft, ChevronRight,
@@ -7,7 +8,7 @@ import {
   Link2, UtensilsCrossed, ShoppingCart, AlertCircle, History,
   Check, ChefHat, ChevronDown, ChevronUp, Loader2, SlidersHorizontal,
   FileText, Tag, ArrowRight, ImagePlus, Maximize2, Square, CheckSquare,
-  CheckCircle2, XCircle, Clock,
+  CheckCircle2, XCircle, Clock, Eye,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -15,7 +16,6 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
 import { api, ApiError } from '@/lib/api';
@@ -62,7 +62,30 @@ interface CookHistoryEntry {
 }
 
 interface PantryItemSummary {
-  id: string; ingredientId: string; ingredientName: string; inStock: boolean;
+  id: string; ingredientId: string; ingredientName: string;
+  inStock: boolean; quantity: number | null; unit: string | null; notes: string | null;
+  images: { id: string; url: string; sortOrder: number }[];
+}
+
+interface InProgressSession {
+  id: string; recipeId: string | null; recipeTitle: string | null;
+  recipeImage: string | null; userId: string; userName: string | null;
+  userHandle: string | null; userImage: string | null; startedAt: string;
+}
+
+interface UserPin {
+  position: number; recipeId: string | null; recipeTitle: string | null;
+  recipeDescription: string | null; recipeImage: string | null;
+  recipeRating: { avg: number; count: number } | null;
+}
+
+interface UserProfile {
+  id: string; name: string | null; handle: string | null;
+  bio: string | null; image: string | null; pins: UserPin[];
+}
+
+interface PantryChange {
+  inStock: boolean; quantity: number | null; unit: string | null; notes: string | null;
 }
 
 interface CookSession {
@@ -205,51 +228,19 @@ function extractedToRows(ings: ExtractedRecipe['ingredients']): Array<Ingredient
 
 // ─── Confetti ─────────────────────────────────────────────────────────────────
 
-const CONFETTI_COLORS = ['#f97316','#eab308','#22c55e','#06b6d4','#8b5cf6','#ec4899','#ef4444','#3b82f6','#10b981','#f59e0b'];
-
-const CONFETTI_SHAPES = ['rect', 'circle', 'strip'] as const;
-
-function Confetti() {
-  const pieces = useMemo(() =>
-    Array.from({ length: 80 }, (_, i) => ({
-      id: i,
-      x: Math.random() * 110 - 5,
-      delay: Math.random() * 1.2,
-      color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
-      width: Math.random() * 10 + 6,
-      height: Math.random() * 14 + 6,
-      rotation: Math.random() * 360,
-      drift: (Math.random() - 0.5) * 120,
-      duration: 1.8 + Math.random() * 1.4,
-      shape: CONFETTI_SHAPES[Math.floor(Math.random() * 3)],
-    })),
-  []);
-
+function Confetti({ fading }: { fading: boolean }) {
   return (
-    <>
-      <style>{`
-        @keyframes confetti-drop {
-          0% { transform: translateY(-20px) translateX(0) rotate(var(--rot)); opacity: 1; }
-          100% { transform: translateY(100vh) translateX(var(--drift)) rotate(calc(var(--rot) + 720deg)); opacity: 0; }
-        }
-      `}</style>
-      <div className="fixed inset-0 z-[500] pointer-events-none overflow-hidden">
-        {pieces.map((p) => (
-          <div key={p.id}
-            className={cn('absolute', p.shape === 'circle' ? 'rounded-full' : p.shape === 'strip' ? 'rounded-sm' : 'rounded-[2px]')}
-            style={{
-              left: `${p.x}%`,
-              top: 0,
-              width: p.shape === 'strip' ? `${p.width * 0.4}px` : `${p.width}px`,
-              height: p.shape === 'strip' ? `${p.height * 2}px` : `${p.height}px`,
-              backgroundColor: p.color,
-              '--rot': `${p.rotation}deg`,
-              '--drift': `${p.drift}px`,
-              animation: `confetti-drop ${p.duration}s cubic-bezier(0.25,0.46,0.45,0.94) ${p.delay}s forwards`,
-            } as React.CSSProperties} />
-        ))}
-      </div>
-    </>
+    <div style={{ transition: 'opacity 2s ease-out', opacity: fading ? 0 : 1 }}>
+      <ReactConfetti
+        recycle={false}
+        numberOfPieces={120}
+        gravity={0.18}
+        initialVelocityX={{ min: -7, max: 7 }}
+        initialVelocityY={{ min: 7, max: 20 }}
+        confettiSource={{ x: 0, y: 0, w: window.innerWidth, h: 0 }}
+        style={{ zIndex: 500 }}
+      />
+    </div>
   );
 }
 
@@ -1151,9 +1142,23 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
   const [localStepsTicked, setLocalStepsTicked] = useState<Set<number>>(new Set());
   const [showComplete, setShowComplete] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
-  // Complete screen: pantryItem.id → inStock boolean
-  const [pendingStockChanges, setPendingStockChanges] = useState<Record<string, boolean>>({});
+  const [confettiFading, setConfettiFading] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  // Complete screen: pantryItem.id → PantryChange
+  const [pendingStockChanges, setPendingStockChanges] = useState<Record<string, PantryChange>>({});
   const [shoppingAdditions, setShoppingAdditions] = useState<Set<string>>(new Set());
+  // pantryItem.id → toggled on/off for shopping list addition
+  const [pantryShopToggles, setPantryShopToggles] = useState<Record<string, boolean>>({});
+  // pantryItem.id → shopping list entry details
+  const [pantryShopDetails, setPantryShopDetails] = useState<Record<string, { qty: string; unit: string; note: string }>>({});
+  // Add-to-shopping-list modal for ingredient cart button
+  const [shopModal, setShopModal] = useState<{
+    name: string; qty: string; unit: string; note: string;
+    files: File[];
+    pantryItem: PantryItemSummary | null;
+  } | null>(null);
+  const [shopSubmitting, setShopSubmitting] = useState(false);
+  const shopImgRef = useRef<HTMLInputElement>(null);
   const [completing, setCompleting] = useState(false);
   const saveTickRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -1202,26 +1207,58 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
     enabled: open,
   });
 
-  const [dupConfirm, setDupConfirm] = useState<{ name: string } | null>(null);
-
-  const doAddToShoppingList = (name: string) =>
-    api.post('/api/shopping-list/items', { name, source: 'RECIPE' });
+  const [dupConfirm, setDupConfirm] = useState<{ name: string; quantity: number | null; unit: string | null; note: string | null } | null>(null);
 
   const addToShoppingList = useMutation({
-    mutationFn: ({ name }: { name: string }) => doAddToShoppingList(name),
+    mutationFn: ({ name, quantity, unit, note }: { name: string; quantity?: number | null; unit?: string | null; note?: string | null }) =>
+      api.post('/api/shopping-list/items', { name, quantity: quantity ?? null, unit: unit ?? null, note: note ?? null, source: 'RECIPE' }),
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: queryKeys.shoppingList.items() }); toast.success('Added to shopping list'); },
     onError: (e) => toast.error(e instanceof ApiError ? e.message : 'Failed'),
   });
 
-  const handleAddToList = (ingName: string) => {
+  const openAddToShop = (ingName: string) => {
     const simplified = simplifyIngredientName(ingName);
-    const alreadyOn = shoppingListItems.some(
-      (i) => i.name.toLowerCase() === simplified.toLowerCase()
-    );
+    // Find ingredient by name to get its ingredientId, then look up pantry
+    const ing = recipe?.ingredients.find((i) => i.name === ingName || simplifyIngredientName(i.name) === simplified);
+    const pantryItem = ing ? (pantryByIngredientId.get(ing.ingredientId) ?? null) : null;
+    setShopModal({
+      name: simplified,
+      qty: pantryItem?.quantity != null ? String(pantryItem.quantity) : '',
+      unit: pantryItem?.unit ?? '',
+      note: pantryItem?.notes ?? '',
+      files: [],
+      pantryItem,
+    });
+  };
+
+  const confirmShopModal = async () => {
+    if (!shopModal || shopSubmitting) return;
+    const qty = shopModal.qty ? Number(shopModal.qty) : null;
+    const unit = shopModal.unit.trim() || null;
+    const note = shopModal.note.trim() || null;
+    const alreadyOn = shoppingListItems.some((i) => i.name.toLowerCase() === shopModal.name.toLowerCase());
     if (alreadyOn) {
-      setDupConfirm({ name: simplified });
-    } else {
-      addToShoppingList.mutate({ name: simplified });
+      setDupConfirm({ name: shopModal.name, quantity: qty, unit, note });
+      setShopModal(null);
+      return;
+    }
+    setShopSubmitting(true);
+    try {
+      const created = await api.post<{ id: string }>('/api/shopping-list/items', {
+        name: shopModal.name, quantity: qty, unit, note, source: 'RECIPE',
+      });
+      for (const file of shopModal.files) {
+        const form = new FormData();
+        form.append('image', file);
+        await api.postForm(`/api/shopping-list/items/${created.id}/images`, form).catch(() => {});
+      }
+      void queryClient.invalidateQueries({ queryKey: queryKeys.shoppingList.items() });
+      toast.success('Added to shopping list');
+      setShopModal(null);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Failed');
+    } finally {
+      setShopSubmitting(false);
     }
   };
 
@@ -1239,7 +1276,7 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
   useEffect(() => {
     if (open) {
       setImgIdx(0); setLightboxIdx(null); setExpandedStep(null); setConfirmDelete(false);
-      setShowComplete(false); setShowConfetti(false); setPendingStockChanges({}); setShoppingAdditions(new Set());
+      setShowComplete(false); setShowConfetti(false); setConfettiFading(false); setShowSuccess(false); setPendingStockChanges({}); setShoppingAdditions(new Set()); setPantryShopToggles({}); setPantryShopDetails({}); setShopModal(null);
     }
   }, [open, recipeId]);
 
@@ -1338,6 +1375,8 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
       setLocalStepsTicked(new Set());
       setShowComplete(false);
       void queryClient.invalidateQueries({ queryKey: ['cook-session', 'active', recipeId ?? ''] });
+      void queryClient.invalidateQueries({ queryKey: ['cook-sessions', 'household-in-progress'] });
+      void queryClient.invalidateQueries({ queryKey: ['cook-sessions', 'household-history'] });
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to cancel');
     }
@@ -1345,27 +1384,60 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
 
   const openCompleteScreen = () => {
     if (!recipe) return;
-    // Pre-populate: ticked ingredients that are in pantry default to "still in stock"
-    const initial: Record<string, boolean> = {};
+    const initial: Record<string, PantryChange> = {};
     for (const ingId of localTicked) {
-      const pantryItem = pantryByIngredientId.get(ingId);
-      if (pantryItem) {
-        initial[pantryItem.id] = pantryItem.inStock;
+      const pi = pantryByIngredientId.get(ingId);
+      if (pi) {
+        initial[pi.id] = { inStock: pi.inStock, quantity: pi.quantity, unit: pi.unit, notes: pi.notes };
       }
     }
     setPendingStockChanges(initial);
     setShoppingAdditions(new Set());
+    setPantryShopToggles({});
+    setPantryShopDetails({});
     setShowComplete(true);
+  };
+
+  const togglePantryShop = (pi: PantryItemSummary) => {
+    const newVal = !pantryShopToggles[pi.id];
+    setPantryShopToggles((p) => ({ ...p, [pi.id]: newVal }));
+    if (newVal && !pantryShopDetails[pi.id]) {
+      setPantryShopDetails((p) => ({
+        ...p,
+        [pi.id]: {
+          qty: pi.quantity != null ? String(pi.quantity) : '',
+          unit: pi.unit ?? '',
+          note: pi.notes ?? '',
+        },
+      }));
+    }
   };
 
   const confirmComplete = async () => {
     if (!cookSession) return;
     setCompleting(true);
     try {
-      const pantryChanges = Object.entries(pendingStockChanges).map(([itemId, inStock]) => ({ itemId, inStock }));
+      const pantryChanges = Object.entries(pendingStockChanges).map(([itemId, ch]) => ({
+        itemId, inStock: ch.inStock, quantity: ch.quantity, unit: ch.unit, notes: ch.notes,
+      }));
       await api.post(`/api/cook-sessions/${cookSession.id}/complete`, { pantryChanges });
 
-      // Add shopping list items
+      // Add pantry-toggled items to shopping list
+      if (recipe) {
+        for (const ing of recipe.ingredients.filter((i) => localTicked.has(i.ingredientId))) {
+          const pi = pantryByIngredientId.get(ing.ingredientId);
+          if (!pi || !pantryShopToggles[pi.id]) continue;
+          const d = pantryShopDetails[pi.id];
+          await api.post('/api/shopping-list/items', {
+            name: pi.ingredientName,
+            quantity: d?.qty ? Number(d.qty) : null,
+            unit: d?.unit.trim() || null,
+            note: d?.note.trim() || null,
+            source: 'RECIPE',
+          }).catch(() => {});
+        }
+      }
+      // Add out-of-stock / not-in-pantry items
       for (const name of shoppingAdditions) {
         await api.post('/api/shopping-list/items', { name, source: 'RECIPE' }).catch(() => {});
       }
@@ -1373,14 +1445,18 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
       void queryClient.invalidateQueries({ queryKey: queryKeys.pantry.items() });
       void queryClient.invalidateQueries({ queryKey: queryKeys.shoppingList.items() });
       void queryClient.invalidateQueries({ queryKey: ['cook-session', 'active', recipeId ?? ''] });
+      void queryClient.invalidateQueries({ queryKey: ['cook-sessions', 'household-in-progress'] });
+      void queryClient.invalidateQueries({ queryKey: ['cook-sessions', 'household-history'] });
 
       setShowComplete(false);
       setCookSession(null);
       setLocalTicked(new Set());
       setLocalStepsTicked(new Set());
       setShowConfetti(true);
-      toast.success('Recipe completed!');
-      setTimeout(() => setShowConfetti(false), 2200);
+      setConfettiFading(false);
+      setShowSuccess(true);
+      setTimeout(() => setConfettiFading(true), 3500);
+      setTimeout(() => setShowConfetti(false), 5500);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to complete');
     } finally {
@@ -1575,7 +1651,7 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
                         </div>
                         {!isCooking && (
                           <button type="button" title="Add to shopping list"
-                            onClick={() => handleAddToList(ing.name)}
+                            onClick={() => openAddToShop(ing.name)}
                             className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-accent transition-colors text-muted-foreground hover:text-foreground shrink-0">
                             <ShoppingCart className="h-3 w-3" />
                           </button>
@@ -1703,65 +1779,76 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
                     <p className="text-[11px] text-muted-foreground">Confirm the stock status after cooking.</p>
                     {pantryIngredients.map((ing) => {
                       const pi = pantryByIngredientId.get(ing.ingredientId)!;
-                      const currentStock = pendingStockChanges[pi.id] ?? pi.inStock;
+                      const ch = pendingStockChanges[pi.id] ?? { inStock: pi.inStock, quantity: pi.quantity, unit: pi.unit, notes: pi.notes };
+                      const set = (patch: Partial<PantryChange>) => setPendingStockChanges((p) => ({ ...p, [pi.id]: { ...ch, ...patch } }));
+                      const shopOn = !!pantryShopToggles[pi.id];
+                      const sd = pantryShopDetails[pi.id] ?? { qty: '', unit: '', note: '' };
+                      const setShopDetail = (patch: Partial<typeof sd>) =>
+                        setPantryShopDetails((p) => ({ ...p, [pi.id]: { ...sd, ...patch } }));
                       return (
-                        <div key={ing.id} className="rounded-xl border bg-card p-3 space-y-2">
-                          <span className="text-sm font-medium">{ing.name}</span>
-                          <div className="flex items-center gap-2 rounded-xl border p-0.5 bg-muted/30 w-fit">
+                        <div key={ing.id} className="rounded-xl border bg-card p-3 space-y-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="text-sm font-medium">{ing.name}</span>
                             <button type="button"
-                              onClick={() => setPendingStockChanges((p) => ({ ...p, [pi.id]: true }))}
+                              onClick={() => togglePantryShop(pi)}
+                              title={shopOn ? 'Remove from shopping list' : 'Add to shopping list'}
                               className={cn(
-                                'px-3 py-1 rounded-lg text-xs font-semibold transition-colors',
-                                currentStock ? 'bg-emerald-500 text-white' : 'text-muted-foreground hover:text-foreground',
+                                'shrink-0 flex h-7 w-7 items-center justify-center rounded-full transition-colors',
+                                shopOn ? 'bg-primary text-primary-foreground' : 'border text-muted-foreground hover:text-foreground hover:bg-accent',
                               )}>
-                              Still have it
-                            </button>
-                            <button type="button"
-                              onClick={() => setPendingStockChanges((p) => ({ ...p, [pi.id]: false }))}
-                              className={cn(
-                                'px-3 py-1 rounded-lg text-xs font-semibold transition-colors',
-                                !currentStock ? 'bg-rose-500 text-white' : 'text-muted-foreground hover:text-foreground',
-                              )}>
-                              Used it all
+                              <ShoppingCart className="h-3.5 w-3.5" />
                             </button>
                           </div>
+                          <div className="flex items-center gap-2 rounded-xl border p-0.5 bg-muted/30 w-fit">
+                            <button type="button" onClick={() => set({ inStock: true })}
+                              className={cn('px-3 py-1 rounded-lg text-xs font-semibold transition-colors',
+                                ch.inStock ? 'bg-green-500 text-white' : 'text-muted-foreground hover:text-foreground')}>
+                              In Stock
+                            </button>
+                            <button type="button" onClick={() => set({ inStock: false })}
+                              className={cn('px-3 py-1 rounded-lg text-xs font-semibold transition-colors',
+                                !ch.inStock ? 'bg-red-500 text-white' : 'text-muted-foreground hover:text-foreground')}>
+                              Out of Stock
+                            </button>
+                          </div>
+                          <div className="flex gap-2">
+                            <input type="number" min="1" max="999" placeholder="Qty"
+                              value={ch.quantity ?? ''}
+                              onChange={(e) => set({ quantity: e.target.value ? Number(e.target.value) : null })}
+                              className="h-8 w-16 rounded-md border bg-background px-2 text-xs" />
+                            <input type="text" placeholder="Unit (e.g. kg)"
+                              value={ch.unit ?? ''}
+                              onChange={(e) => set({ unit: e.target.value || null })}
+                              className="h-8 flex-1 rounded-md border bg-background px-2 text-xs" />
+                          </div>
+                          <input type="text" placeholder="Note…"
+                            value={ch.notes ?? ''}
+                            onChange={(e) => set({ notes: e.target.value || null })}
+                            className="h-8 w-full rounded-md border bg-background px-2 text-xs" />
+                          {shopOn && (
+                            <div className="border-t pt-3 space-y-2">
+                              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                                <ShoppingCart className="h-3 w-3" />Shopping List Entry
+                              </p>
+                              <div className="flex gap-2">
+                                <input type="number" min="1" max="999" placeholder="Qty"
+                                  value={sd.qty}
+                                  onChange={(e) => setShopDetail({ qty: e.target.value })}
+                                  className="h-8 w-16 rounded-md border bg-background px-2 text-xs" />
+                                <input type="text" placeholder="Unit"
+                                  value={sd.unit}
+                                  onChange={(e) => setShopDetail({ unit: e.target.value })}
+                                  className="h-8 flex-1 rounded-md border bg-background px-2 text-xs" />
+                              </div>
+                              <input type="text" placeholder="Note for shopping list…"
+                                value={sd.note}
+                                onChange={(e) => setShopDetail({ note: e.target.value })}
+                                className="h-8 w-full rounded-md border bg-background px-2 text-xs" />
+                            </div>
+                          )}
                         </div>
                       );
                     })}
-                  </div>
-                );
-                return null;
-              })()}
-
-              {/* Out-of-stock after cook → shopping list */}
-              {(() => {
-                const outOfStock = recipe.ingredients.filter((ing) => {
-                  if (!localTicked.has(ing.ingredientId)) return false;
-                  const pi = pantryByIngredientId.get(ing.ingredientId);
-                  if (!pi) return false;
-                  return !(pendingStockChanges[pi.id] ?? pi.inStock);
-                });
-                if (outOfStock.length > 0) return (
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Out of Stock — Add to Shopping List?</p>
-                    {outOfStock.map((ing) => (
-                      <button key={ing.id} type="button"
-                        onClick={() => setShoppingAdditions((p) => {
-                          const n = new Set(p);
-                          if (n.has(ing.name)) n.delete(ing.name); else n.add(ing.name);
-                          return n;
-                        })}
-                        className={cn(
-                          'w-full flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors text-left',
-                          shoppingAdditions.has(ing.name)
-                            ? 'border-primary bg-primary/5 text-primary font-medium'
-                            : 'border-border hover:bg-accent/40',
-                        )}>
-                        <ShoppingCart className="h-3.5 w-3.5 shrink-0" />
-                        {ing.name}
-                        {shoppingAdditions.has(ing.name) && <Check className="h-3.5 w-3.5 ml-auto" />}
-                      </button>
-                    ))}
                   </div>
                 );
                 return null;
@@ -1823,19 +1910,19 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
               className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
               <X className="h-5 w-5" />
             </button>
-            {lightboxIdx > 0 && (
-              <button type="button"
-                onClick={() => setLightboxIdx((i) => i! - 1)}
-                className="absolute left-4 top-1/2 -translate-y-1/2 flex h-10 w-10 lg:h-12 lg:w-12 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
-                <ChevronLeft className="h-5 w-5 lg:h-6 lg:w-6" />
-              </button>
-            )}
-            {lightboxIdx < images.length - 1 && (
-              <button type="button"
-                onClick={() => setLightboxIdx((i) => i! + 1)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 flex h-10 w-10 lg:h-12 lg:w-12 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
-                <ChevronRight className="h-5 w-5 lg:h-6 lg:w-6" />
-              </button>
+            {images.length > 1 && (
+              <>
+                <button type="button"
+                  onClick={() => setLightboxIdx((i) => ((i ?? 0) - 1 + images.length) % images.length)}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 flex h-10 w-10 lg:h-12 lg:w-12 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
+                  <ChevronLeft className="h-5 w-5 lg:h-6 lg:w-6" />
+                </button>
+                <button type="button"
+                  onClick={() => setLightboxIdx((i) => ((i ?? 0) + 1) % images.length)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 flex h-10 w-10 lg:h-12 lg:w-12 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
+                  <ChevronRight className="h-5 w-5 lg:h-6 lg:w-6" />
+                </button>
+              </>
             )}
             <img
               src={images[lightboxIdx].url}
@@ -1857,7 +1944,32 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
     </Dialog>
 
     {/* Confetti overlay */}
-    {showConfetti && <Confetti />}
+    {showConfetti && <Confetti fading={confettiFading} />}
+
+    {/* Recipe complete success modal */}
+    <Dialog open={showSuccess} onOpenChange={(o) => !o && setShowSuccess(false)}>
+      <DialogContent className="w-[calc(100vw-32px)] max-w-sm p-0 gap-0" hideClose>
+        <div className="flex flex-col items-center gap-5 px-6 py-8 text-center">
+          <div className="relative">
+            <div className="flex h-24 w-24 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
+              <ChefHat className="h-12 w-12 text-green-600 dark:text-green-400" />
+            </div>
+            <div className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full bg-green-500 shadow-md">
+              <Check className="h-4 w-4 text-white" strokeWidth={3} />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <h2 className="text-xl font-bold tracking-tight">Recipe Complete!</h2>
+            <p className="text-sm text-muted-foreground">
+              Great cook! Your pantry has been updated and the session is saved.
+            </p>
+          </div>
+          <Button className="w-full" onClick={() => setShowSuccess(false)}>
+            Back to Recipe
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
 
     {/* Duplicate shopping list confirm */}
     <Dialog open={!!dupConfirm} onOpenChange={(o) => !o && setDupConfirm(null)}>
@@ -1875,11 +1987,107 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
           <div className="flex gap-2">
             <Button variant="outline" className="flex-1" onClick={() => setDupConfirm(null)}>Skip</Button>
             <Button className="flex-1" onClick={() => {
-              if (dupConfirm) addToShoppingList.mutate({ name: dupConfirm.name });
+              if (dupConfirm) addToShoppingList.mutate({ name: dupConfirm.name, quantity: dupConfirm.quantity, unit: dupConfirm.unit, note: dupConfirm.note });
               setDupConfirm(null);
             }}>Add Again</Button>
           </div>
         </div>
+      </DialogContent>
+    </Dialog>
+    {/* Add-to-shopping-list modal (ingredient cart button) */}
+    <Dialog open={!!shopModal} onOpenChange={(o) => !o && setShopModal(null)}>
+      <DialogContent className="w-[calc(100vw-32px)] max-w-md p-0 gap-0" hideClose>
+        <div className="flex items-center justify-between px-4 py-3 border-b">
+          <div className="flex items-center gap-2">
+            <ShoppingCart className="h-4 w-4 text-primary" />
+            <h3 className="font-semibold text-sm">Add to Shopping List</h3>
+          </div>
+          <DialogClose className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-accent transition-colors">
+            <X className="h-4 w-4" />
+          </DialogClose>
+        </div>
+        {shopModal && (
+          <div className="px-4 py-4 space-y-3">
+            {shopModal.pantryItem && shopModal.pantryItem.images.length > 0 && (
+              <img src={shopModal.pantryItem.images[0].url} alt=""
+                className="h-24 w-full object-cover rounded-xl border" />
+            )}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Item name</label>
+              <input type="text" className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                value={shopModal.name}
+                onChange={(e) => setShopModal((m) => m ? { ...m, name: e.target.value } : m)} />
+            </div>
+            {shopModal.pantryItem && (
+              <p className="text-[11px] text-muted-foreground">
+                Current pantry stock: {shopModal.pantryItem.inStock ? 'in stock' : 'out of stock'}
+              </p>
+            )}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Quantity</label>
+              <div className="flex items-center gap-2">
+                <button type="button"
+                  onClick={() => setShopModal((m) => m ? { ...m, qty: String(Math.max(1, (Number(m.qty) || 0) - 1)) } : m)}
+                  className="h-8 w-8 shrink-0 flex items-center justify-center rounded-md border hover:bg-accent transition-colors text-muted-foreground">
+                  <Minus className="h-3.5 w-3.5" />
+                </button>
+                <input type="number" min="1" className="h-8 flex-1 rounded-md border bg-background px-3 text-sm text-center"
+                  value={shopModal.qty}
+                  onChange={(e) => setShopModal((m) => m ? { ...m, qty: e.target.value } : m)} />
+                <button type="button"
+                  onClick={() => setShopModal((m) => m ? { ...m, qty: String((Number(m.qty) || 0) + 1) } : m)}
+                  className="h-8 w-8 shrink-0 flex items-center justify-center rounded-md border hover:bg-accent transition-colors text-muted-foreground">
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Unit</label>
+              <input type="text" placeholder="e.g. kg, cups…" className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                value={shopModal.unit}
+                onChange={(e) => setShopModal((m) => m ? { ...m, unit: e.target.value } : m)} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Note</label>
+              <input type="text" placeholder="Add a note…" className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                value={shopModal.note}
+                onChange={(e) => setShopModal((m) => m ? { ...m, note: e.target.value } : m)} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Images</label>
+              <div className="flex flex-wrap gap-2">
+                {shopModal.files.map((file, idx) => (
+                  <div key={idx} className="relative group">
+                    <img src={URL.createObjectURL(file)} alt="" className="h-16 w-16 rounded-lg object-cover border" />
+                    <button type="button"
+                      onClick={() => setShopModal((m) => m ? { ...m, files: m.files.filter((_, i) => i !== idx) } : m)}
+                      className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </div>
+                ))}
+                <button type="button"
+                  onClick={() => shopImgRef.current?.click()}
+                  className="h-16 w-16 rounded-lg border-2 border-dashed flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors">
+                  <ImagePlus className="h-5 w-5" />
+                </button>
+                <input ref={shopImgRef} type="file" accept="image/*" multiple className="hidden"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files ?? []);
+                    if (files.length) setShopModal((m) => m ? { ...m, files: [...m.files, ...files] } : m);
+                    e.target.value = '';
+                  }} />
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => setShopModal(null)}>Cancel</Button>
+              <Button className="flex-1" disabled={!shopModal.name.trim() || shopSubmitting}
+                onClick={() => { void confirmShopModal(); }}>
+                {shopSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Add to List'}
+              </Button>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
     </>
@@ -2130,7 +2338,27 @@ type SortBy = 'alpha' | 'z-alpha' | 'newest' | 'oldest';
 
 // ─── Cooking History Tab ──────────────────────────────────────────────────────
 
-function CookingHistoryTab({ entries, isLoading }: { entries: CookHistoryEntry[]; isLoading: boolean }) {
+function CookingHistoryTab({ entries, inProgressEntries, isLoading, onViewUser, onViewRecipe }: {
+  entries: CookHistoryEntry[];
+  inProgressEntries: InProgressSession[];
+  isLoading: boolean;
+  onViewUser: (u: { id: string; name: string | null; handle: string | null; image: string | null }) => void;
+  onViewRecipe: (recipeId: string) => void;
+}) {
+  const [subTab, setSubTab] = useState<'in-progress' | 'completed'>('completed');
+  const [confirmingCancelId, setConfirmingCancelId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const cancelMutation = useMutation({
+    mutationFn: (sessionId: string) => api.post(`/api/cook-sessions/${sessionId}/cancel`),
+    onSuccess: () => {
+      setConfirmingCancelId(null);
+      void queryClient.invalidateQueries({ queryKey: ['cook-sessions', 'household-in-progress'] });
+      void queryClient.invalidateQueries({ queryKey: ['cook-sessions', 'household-history'] });
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : 'Failed to cancel session'),
+  });
+
   if (isLoading) {
     return (
       <div className="flex justify-center py-16">
@@ -2138,60 +2366,291 @@ function CookingHistoryTab({ entries, isLoading }: { entries: CookHistoryEntry[]
       </div>
     );
   }
-  if (entries.length === 0) {
-    return (
-      <div className="flex flex-col items-center gap-3 py-16 text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
-          <Clock className="h-6 w-6 text-muted-foreground" />
-        </div>
-        <div>
-          <p className="font-semibold text-sm">No cooking history yet</p>
-          <p className="text-xs text-muted-foreground mt-1">Completed cook sessions will appear here.</p>
-        </div>
-      </div>
-    );
-  }
+
   return (
-    <div className="space-y-3">
-      {entries.map((entry) => (
-        <div key={entry.id} className="rounded-xl border bg-card overflow-hidden flex gap-3 p-3">
-          {entry.recipeImage ? (
-            <img src={entry.recipeImage} alt={entry.recipeTitle ?? ''} className="h-16 w-16 rounded-lg object-cover shrink-0" />
-          ) : (
-            <div className="h-16 w-16 rounded-lg bg-muted shrink-0 flex items-center justify-center">
+    <div className="space-y-4">
+      {/* Sub-tabs */}
+      <div className="flex rounded-xl border border-border/50 bg-muted/30 p-0.5 gap-0.5">
+        {([
+          { id: 'in-progress' as const, label: 'In Progress', count: inProgressEntries.length },
+          { id: 'completed' as const, label: 'Completed', count: entries.length },
+        ]).map(({ id, label, count }) => (
+          <button key={id} type="button"
+            onClick={() => setSubTab(id)}
+            className={cn(
+              'flex-1 flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-semibold transition-all',
+              subTab === id ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground',
+            )}>
+            {label}
+            {count > 0 && (
+              <span className={cn(
+                'rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none',
+                subTab === id ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground',
+              )}>{count}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {subTab === 'in-progress' ? (
+        inProgressEntries.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 py-12 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
               <ChefHat className="h-6 w-6 text-muted-foreground" />
             </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-sm truncate">{entry.recipeTitle ?? 'Deleted recipe'}</p>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              {entry.userImage ? (
-                <img src={entry.userImage} alt="" className="h-5 w-5 rounded-full object-cover" />
+            <div>
+              <p className="font-semibold text-sm">No active cook sessions</p>
+              <p className="text-xs text-muted-foreground mt-1">Active sessions will appear here while cooking.</p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {inProgressEntries.map((entry) => (
+              <div key={entry.id} className="rounded-xl border bg-card overflow-hidden flex gap-3 p-3">
+                {entry.recipeImage ? (
+                  <img src={entry.recipeImage} alt={entry.recipeTitle ?? ''} className="h-16 w-16 rounded-lg object-cover shrink-0" />
+                ) : (
+                  <div className="h-16 w-16 rounded-lg bg-muted shrink-0 flex items-center justify-center">
+                    <ChefHat className="h-6 w-6 text-muted-foreground" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-semibold text-sm truncate">{entry.recipeTitle ?? 'Deleted recipe'}</p>
+                    {entry.recipeId && (
+                      <button type="button" onClick={() => onViewRecipe(entry.recipeId!)}
+                        className="shrink-0 text-xs font-semibold text-primary hover:text-primary/80 transition-colors px-2 py-1 rounded-full border border-primary/30 hover:border-primary/60 bg-primary/5 hover:bg-primary/10">
+                        Continue
+                      </button>
+                    )}
+                  </div>
+                  <button type="button"
+                    onClick={() => onViewUser({ id: entry.userId, name: entry.userName, handle: entry.userHandle, image: entry.userImage })}
+                    className="flex items-center gap-1.5 mt-0.5 hover:opacity-70 transition-opacity">
+                    {entry.userImage ? (
+                      <img src={entry.userImage} alt="" className="h-5 w-5 rounded-full object-cover" />
+                    ) : (
+                      <div className="h-5 w-5 rounded-full bg-muted flex items-center justify-center shrink-0">
+                        <span className="text-[9px] font-bold text-muted-foreground">
+                          {(entry.userName ?? entry.userHandle ?? '?')[0].toUpperCase()}
+                        </span>
+                      </div>
+                    )}
+                    <span className="text-xs text-muted-foreground truncate">
+                      {entry.userName ?? entry.userHandle ?? 'Unknown'}
+                    </span>
+                  </button>
+                  {confirmingCancelId === entry.id ? (
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      <span className="text-[11px] text-muted-foreground">Cancel session?</span>
+                      <button type="button"
+                        disabled={cancelMutation.isPending}
+                        onClick={() => cancelMutation.mutate(entry.id)}
+                        className="text-[11px] font-semibold text-rose-500 hover:text-rose-600 transition-colors disabled:opacity-50">
+                        Yes
+                      </button>
+                      <span className="text-muted-foreground opacity-40">·</span>
+                      <button type="button" onClick={() => setConfirmingCancelId(null)}
+                        className="text-[11px] text-muted-foreground hover:text-foreground transition-colors">
+                        No
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      <span className="text-[10px] font-bold text-amber-500 uppercase tracking-wide">Cooking</span>
+                      <span className="text-muted-foreground opacity-40">·</span>
+                      <span className="text-[11px] text-muted-foreground">
+                        Started {new Date(entry.startedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                      </span>
+                      <span className="text-muted-foreground opacity-40">·</span>
+                      <button type="button" onClick={() => setConfirmingCancelId(entry.id)}
+                        className="text-[11px] font-medium text-rose-500 hover:text-rose-600 transition-colors">
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      ) : (
+        entries.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 py-12 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
+              <Clock className="h-6 w-6 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm">No cooking history yet</p>
+              <p className="text-xs text-muted-foreground mt-1">Completed cook sessions will appear here.</p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {entries.map((entry) => (
+              <div key={entry.id} className="rounded-xl border bg-card overflow-hidden flex gap-3 p-3">
+                {entry.recipeImage ? (
+                  <img src={entry.recipeImage} alt={entry.recipeTitle ?? ''} className="h-16 w-16 rounded-lg object-cover shrink-0" />
+                ) : (
+                  <div className="h-16 w-16 rounded-lg bg-muted shrink-0 flex items-center justify-center">
+                    <ChefHat className="h-6 w-6 text-muted-foreground" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-semibold text-sm truncate">{entry.recipeTitle ?? 'Deleted recipe'}</p>
+                    {entry.recipeId && (
+                      <button type="button" onClick={() => onViewRecipe(entry.recipeId!)}
+                        className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-1">
+                        <Eye className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  <button type="button"
+                    onClick={() => onViewUser({ id: entry.userId, name: entry.userName, handle: entry.userHandle, image: entry.userImage })}
+                    className="flex items-center gap-1.5 mt-0.5 hover:opacity-70 transition-opacity">
+                    {entry.userImage ? (
+                      <img src={entry.userImage} alt="" className="h-5 w-5 rounded-full object-cover" />
+                    ) : (
+                      <div className="h-5 w-5 rounded-full bg-muted flex items-center justify-center shrink-0">
+                        <span className="text-[9px] font-bold text-muted-foreground">
+                          {(entry.userName ?? entry.userHandle ?? '?')[0].toUpperCase()}
+                        </span>
+                      </div>
+                    )}
+                    <span className="text-xs text-muted-foreground truncate">
+                      {entry.userName ?? entry.userHandle ?? 'Unknown'}
+                    </span>
+                  </button>
+                  <div className="flex items-center gap-2 mt-1.5 text-[11px] text-muted-foreground">
+                    <span>Completed {new Date(entry.cookedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    {entry.servings && (
+                      <>
+                        <span className="opacity-40">·</span>
+                        <span>{entry.servings} serving{entry.servings !== 1 ? 's' : ''}</span>
+                      </>
+                    )}
+                  </div>
+                  {entry.note && <p className="mt-1 text-xs text-muted-foreground italic truncate">"{entry.note}"</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
+// ─── History User Modal ───────────────────────────────────────────────────────
+
+function HistoryUserModal({ user, onClose, onViewRecipe }: {
+  user: { id: string; name: string | null; handle: string | null; image: string | null } | null;
+  onClose: () => void;
+  onViewRecipe: (recipeId: string) => void;
+}) {
+  const { data: profile, isLoading } = useQuery({
+    queryKey: ['user-profile', user?.handle],
+    queryFn: () => api.get<UserProfile>(`/api/users/${user!.handle}`),
+    enabled: !!user?.handle,
+  });
+
+  const displayName = profile?.name ?? user?.name ?? user?.handle ?? 'Unknown';
+  const displayHandle = profile?.handle ?? user?.handle;
+  const displayImage = profile?.image ?? user?.image;
+  const initial = displayName[0]?.toUpperCase() ?? '?';
+  const activePins = (profile?.pins ?? []).filter((p) => p.recipeId !== null);
+
+  return (
+    <Dialog open={!!user} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="w-[calc(100vw-32px)] max-w-sm sm:max-w-md p-0 gap-0 overflow-hidden flex flex-col max-h-[85vh]" hideClose>
+        <DialogClose className="absolute right-3 top-3 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-background/90 border border-border/60 shadow-md text-foreground hover:bg-muted transition-colors">
+          <X className="h-4 w-4" />
+        </DialogClose>
+
+        {/* Banner with overlapping avatar */}
+        <div className="relative h-16 bg-muted/40 border-b shrink-0">
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2">
+            <div className="rounded-full p-1 bg-background shadow-md ring-4 ring-background">
+              {displayImage ? (
+                <img src={displayImage} alt="" className="h-14 w-14 rounded-full object-cover" />
               ) : (
-                <div className="h-5 w-5 rounded-full bg-muted flex items-center justify-center shrink-0">
-                  <span className="text-[9px] font-bold text-muted-foreground">
-                    {(entry.userName ?? entry.userHandle ?? '?')[0].toUpperCase()}
-                  </span>
+                <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center">
+                  <span className="text-2xl font-bold text-muted-foreground">{initial}</span>
                 </div>
               )}
-              <span className="text-xs text-muted-foreground truncate">
-                {entry.userName ?? entry.userHandle ?? 'Unknown'}
-              </span>
             </div>
-            <div className="flex items-center gap-2 mt-1.5 text-[11px] text-muted-foreground">
-              <span>{new Date(entry.cookedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-              {entry.servings && (
-                <>
-                  <span className="opacity-40">·</span>
-                  <span>{entry.servings} serving{entry.servings !== 1 ? 's' : ''}</span>
-                </>
-              )}
-            </div>
-            {entry.note && <p className="mt-1 text-xs text-muted-foreground italic truncate">"{entry.note}"</p>}
           </div>
         </div>
-      ))}
-    </div>
+
+        <div className="scrollbar-hide overflow-y-auto flex-1 pt-10 pb-5 px-5 space-y-4">
+          {/* Name + handle */}
+          <div className="text-center space-y-0.5">
+            <p className="font-bold text-base">{displayName}</p>
+            {displayHandle && <p className="text-muted-foreground text-sm">@{displayHandle}</p>}
+          </div>
+
+          {isLoading && (
+            <div className="flex justify-center py-4">
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary/30 border-t-transparent" />
+            </div>
+          )}
+
+          {/* Bio */}
+          {profile?.bio ? (
+            <div className="rounded-xl bg-muted/50 border border-border/40 px-3 py-2.5">
+              <p className="text-sm leading-relaxed text-foreground/80">{profile.bio}</p>
+            </div>
+          ) : profile && (
+            <p className="text-center text-xs text-muted-foreground italic">No bio yet.</p>
+          )}
+
+          {/* Pinned recipes */}
+          {activePins.length > 0 && (
+            <div className="space-y-3">
+              <p className="text-sm font-semibold">Pinned Recipes</p>
+              <div className="space-y-2.5">
+                {activePins.map((pin) => (
+                  <div key={pin.position} className="relative flex items-center gap-3 rounded-xl border bg-card p-2.5">
+                    <span className="absolute -top-2 -left-2 z-10 flex h-[22px] w-[22px] items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-bold shadow-sm leading-none">
+                      {pin.position}
+                    </span>
+                    {pin.recipeImage
+                      ? <img src={pin.recipeImage} alt="" className="h-14 w-14 rounded-lg object-cover shrink-0" />
+                      : <div className="h-14 w-14 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                          <UtensilsCrossed className="h-5 w-5 text-muted-foreground/40" />
+                        </div>
+                    }
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <p className="text-sm font-semibold truncate">
+                        {pin.recipeTitle ?? <span className="italic text-muted-foreground">Recipe no longer available</span>}
+                      </p>
+                      {pin.recipeDescription && (
+                        <p className="text-xs text-muted-foreground line-clamp-1 leading-relaxed">{pin.recipeDescription}</p>
+                      )}
+                      {pin.recipeRating && pin.recipeRating.count > 0 && (
+                        <StarDisplay rating={pin.recipeRating.avg} />
+                      )}
+                    </div>
+                    {pin.recipeId && (
+                      <button type="button"
+                        onClick={() => { onViewRecipe(pin.recipeId!); onClose(); }}
+                        className="shrink-0 flex h-7 w-7 items-center justify-center rounded-full hover:bg-accent transition-colors text-muted-foreground hover:text-foreground">
+                        <Eye className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!user?.handle && (
+            <p className="text-xs text-muted-foreground text-center italic">No public profile available.</p>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -2212,6 +2671,7 @@ function RecipesPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<'idle' | 'scan' | 'url'>('idle');
   const [addRecipeOpen, setAddRecipeOpen] = useState(false);
+  const [historyUser, setHistoryUser] = useState<{ id: string; name: string | null; handle: string | null; image: string | null } | null>(null);
   const [editRecipe, setEditRecipe] = useState<RecipeDetail | null>(null);
   const [categoryPanelOpen, setCategoryPanelOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -2241,6 +2701,13 @@ function RecipesPage() {
     queryKey: ['cook-sessions', 'household-history'],
     queryFn: () => api.get<CookHistoryEntry[]>('/api/cook-sessions/household-history'),
     enabled: activeTab === 'history',
+  });
+
+  const { data: inProgressSessions = [] } = useQuery({
+    queryKey: ['cook-sessions', 'household-in-progress'],
+    queryFn: () => api.get<InProgressSession[]>('/api/cook-sessions/household-in-progress'),
+    enabled: activeTab === 'history',
+    refetchInterval: 30000,
   });
 
   const canMakeIds = canMake
@@ -2339,10 +2806,53 @@ function RecipesPage() {
         </div>
 
         {activeTab === 'history' ? (
-          <CookingHistoryTab entries={cookHistory} isLoading={historyLoading} />
+          <CookingHistoryTab
+            entries={cookHistory}
+            inProgressEntries={inProgressSessions}
+            isLoading={historyLoading}
+            onViewUser={setHistoryUser}
+            onViewRecipe={(id) => { setSelectedRecipeId(id); setActiveTab('recipes'); }}
+          />
         ) : (<>
 
-        {/* Search + Filter — 50/50 on all devices */}
+        {/* Action buttons — 50/50 */}
+        <div className="flex gap-2 mb-2">
+          <div className="w-1/2">
+            <Button className="w-full gap-1.5 h-9 text-sm" onClick={() => setAddRecipeOpen((v) => !v)}>
+              <Plus className="h-4 w-4" />Add Recipe
+              <ChevronDown className={cn('h-3.5 w-3.5 ml-auto transition-transform duration-200', addRecipeOpen && 'rotate-180')} />
+            </Button>
+          </div>
+          <div className="w-1/2">
+            <Button variant="outline" className="w-full gap-1.5 h-9 text-sm" onClick={() => setCategoryPanelOpen(true)}>
+              <Tag className="h-4 w-4" />Manage Categories
+            </Button>
+          </div>
+        </div>
+
+        {/* Add recipe option cards — full container width */}
+        {addRecipeOpen && (
+          <div className="grid grid-cols-3 gap-2 mb-4 animate-in fade-in slide-in-from-top-2 duration-200">
+            {([
+              { mode: 'idle' as const, icon: FileText, label: 'Manual', desc: 'Fill in the recipe yourself' },
+              { mode: 'scan' as const, icon: Camera, label: 'Screenshot', desc: 'Upload a photo of a recipe' },
+              { mode: 'url' as const, icon: Link2, label: 'URL Import', desc: 'Import from a recipe website' },
+            ]).map(({ mode, icon: Icon, label, desc }) => (
+              <button key={mode} type="button" onClick={() => openAddRecipe(mode)}
+                className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-3 text-center hover:border-primary/40 hover:bg-primary/5 transition-all">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                  <Icon className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold leading-tight">{label}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{desc}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Search + Filter — 50/50 */}
         <div className="flex gap-2 mb-2">
           <div className="w-1/2 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
@@ -2373,45 +2883,58 @@ function RecipesPage() {
               {/* Sort By */}
               <div className="space-y-1.5">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Sort By</p>
-                <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortBy)}>
-                  <SelectTrigger className={cn('h-9 w-full text-sm', sortBy !== 'alpha' ? 'bg-primary/15 text-primary border-primary/20 font-medium' : '')}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="alpha">A–Z</SelectItem>
-                    <SelectItem value="z-alpha">Z–A</SelectItem>
-                    <SelectItem value="newest">Latest Recipes</SelectItem>
-                    <SelectItem value="oldest">Older Recipes</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="flex flex-wrap gap-1.5">
+                  {([
+                    { id: 'alpha' as const, label: 'A–Z' },
+                    { id: 'z-alpha' as const, label: 'Z–A' },
+                    { id: 'newest' as const, label: 'Latest Recipes' },
+                    { id: 'oldest' as const, label: 'Older Recipes' },
+                  ] as { id: SortBy; label: string }[]).map(({ id, label }) => (
+                    <button key={id} type="button" onClick={() => setSortBy(id)}
+                      className={cn('rounded-full px-3 py-1 text-xs font-medium border transition-colors',
+                        sortBy === id ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:text-foreground')}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              {/* Display */}
-              <div className="space-y-1.5">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Display</p>
-                <Select value={activeCategoryId ?? ''} onValueChange={(v) => setActiveCategoryId(v || null)}>
-                  <SelectTrigger className={cn('h-9 w-full text-sm', activeCategoryId ? 'bg-primary/15 text-primary border-primary/20 font-medium' : '')}>
-                    <SelectValue placeholder="All Categories" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">All Categories</SelectItem>
-                    {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Category */}
+              {categories.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Category</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button type="button" onClick={() => setActiveCategoryId(null)}
+                      className={cn('rounded-full px-3 py-1 text-xs font-medium border transition-colors',
+                        activeCategoryId === null ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:text-foreground')}>
+                      All
+                    </button>
+                    {categories.map((c) => (
+                      <button key={c.id} type="button" onClick={() => setActiveCategoryId(c.id)}
+                        className={cn('rounded-full px-3 py-1 text-xs font-medium border transition-colors',
+                          activeCategoryId === c.id ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:text-foreground')}>
+                        {c.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-              {/* Can-make filter */}
+              {/* Pantry Match */}
               <div className="space-y-1.5">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Pantry Match</p>
-                <Select value={canMakeFilter} onValueChange={(v) => setCanMakeFilter(v as 'all' | 'can-make')}>
-                  <SelectTrigger className={cn('h-9 w-full text-sm', canMakeFilter !== 'all' ? 'bg-primary/15 text-primary border-primary/20 font-medium' : '')}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Recipes</SelectItem>
-                    <SelectItem value="can-make">What Can I Make?</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="flex flex-wrap gap-1.5">
+                  {([
+                    { id: 'all' as const, label: 'All Recipes' },
+                    { id: 'can-make' as const, label: 'What Can I Make?' },
+                  ]).map(({ id, label }) => (
+                    <button key={id} type="button" onClick={() => setCanMakeFilter(id)}
+                      className={cn('rounded-full px-3 py-1 text-xs font-medium border transition-colors',
+                        canMakeFilter === id ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:text-foreground')}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
                 {canMakeFilter === 'can-make' && (
                   <p className="text-[10px] text-muted-foreground">Recipes you can cook based on your pantry stock.</p>
                 )}
@@ -2433,43 +2956,6 @@ function RecipesPage() {
         <div className="mb-3">
           <AlphabetBar filter={letterFilter} onChange={setLetterFilter} />
         </div>
-
-        {/* Action buttons — 50/50 */}
-        <div className="flex gap-2 mb-2">
-          <div className="w-1/2">
-            <Button className="w-full gap-1.5 h-9 text-sm" onClick={() => setAddRecipeOpen((v) => !v)}>
-              <Plus className="h-4 w-4" />Add Recipe
-              <ChevronDown className={cn('h-3.5 w-3.5 ml-auto transition-transform duration-200', addRecipeOpen && 'rotate-180')} />
-            </Button>
-          </div>
-          <div className="w-1/2">
-            <Button variant="outline" className="w-full gap-1.5 h-9 text-sm" onClick={() => setCategoryPanelOpen(true)}>
-              <Tag className="h-4 w-4" />Categories
-            </Button>
-          </div>
-        </div>
-
-        {/* Add recipe option cards — full container width */}
-        {addRecipeOpen && (
-          <div className="grid grid-cols-3 gap-2 mb-4 animate-in fade-in slide-in-from-top-2 duration-200">
-            {([
-              { mode: 'idle' as const, icon: FileText, label: 'Manual', desc: 'Fill in the recipe yourself' },
-              { mode: 'scan' as const, icon: Camera, label: 'Screenshot', desc: 'Upload a photo of a recipe' },
-              { mode: 'url' as const, icon: Link2, label: 'URL Import', desc: 'Import from a recipe website' },
-            ]).map(({ mode, icon: Icon, label, desc }) => (
-              <button key={mode} type="button" onClick={() => openAddRecipe(mode)}
-                className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-3 text-center hover:border-primary/40 hover:bg-primary/5 transition-all">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
-                  <Icon className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <div>
-                  <p className="text-xs font-semibold leading-tight">{label}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{desc}</p>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
 
         {/* Recipe grid */}
         {isLoading ? (
@@ -2524,6 +3010,13 @@ function RecipesPage() {
         open={categoryPanelOpen}
         onClose={() => setCategoryPanelOpen(false)}
         categories={categories}
+      />
+
+      {/* History user card modal */}
+      <HistoryUserModal
+        user={historyUser}
+        onClose={() => setHistoryUser(null)}
+        onViewRecipe={(id) => { setHistoryUser(null); setSelectedRecipeId(id); }}
       />
     </div>
   );

@@ -2,15 +2,16 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useState, useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Refrigerator, Plus, Pencil, Trash2, X, SlidersHorizontal,
-  ShoppingCart, ChevronDown, ChevronUp, Loader2, Package, Check,
+  Refrigerator, Plus, Minus, Pencil, Trash2, X, SlidersHorizontal,
+  ShoppingCart, ChevronDown, ChevronUp, Loader2, Check,
   Tag, Search, ChefHat, Users, BookOpenText, ChevronRight, ChevronLeft,
-  ImageIcon,
+  ImageIcon, Maximize2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { api, ApiError } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
@@ -34,7 +35,7 @@ interface PantryItem {
 interface RecipeSummary {
   id: string; title: string; description: string | null;
   baseServings: number; categoryId: string | null; categoryName: string | null;
-  imageUrl: string | null; avgRating: number | null; createdAt: string;
+  images: string[]; createdAt: string;
 }
 
 // ─── Category Sidebar Panel (mirrors recipes CategoryPanel) ───────────────────
@@ -127,11 +128,17 @@ function CategoryPanel({ open, onClose, categories }: {
                     {otherCategories.length > 0 && (
                       <div className="space-y-1">
                         <p className="text-[10px] text-muted-foreground">Move items to (optional):</p>
-                        <select className="h-8 w-full rounded-md border bg-background px-2 text-xs"
-                          value={targetCategoryId} onChange={(e) => setTargetCategoryId(e.target.value)}>
-                          <option value="">Remove from category</option>
-                          {otherCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        </select>
+                        <Select
+                          value={targetCategoryId || '__remove__'}
+                          onValueChange={(v) => setTargetCategoryId(v === '__remove__' ? '' : v)}>
+                          <SelectTrigger className="h-8 w-full text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__remove__">Remove from category</SelectItem>
+                            {otherCategories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
                       </div>
                     )}
                     <div className="flex gap-2">
@@ -294,11 +301,14 @@ function ItemModal({ open, onClose, categories, editItem }: {
 
           <div className="space-y-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Category *</label>
-            <select className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-              value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              <option value="">Select a category…</option>
-              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <Select value={categoryId} onValueChange={setCategoryId}>
+              <SelectTrigger className="h-9 w-full text-sm">
+                <SelectValue placeholder="Select a category…" />
+              </SelectTrigger>
+              <SelectContent>
+                {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
             {categories.length === 0 && (
               <p className="text-[10px] text-muted-foreground">Create a category first using the Categories panel.</p>
             )}
@@ -354,7 +364,7 @@ function ItemModal({ open, onClose, categories, editItem }: {
                       <img src={img.url} alt="" className="h-20 w-20 rounded-xl object-cover border" />
                       <button type="button"
                         onClick={() => void handleImageDelete(img.id)}
-                        className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-foreground/80 text-background flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                         <X className="h-3 w-3" />
                       </button>
                     </div>
@@ -393,8 +403,13 @@ function ItemDetailModal({ item, open, onClose, onEdit }: {
 }) {
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [shopModal, setShopModal] = useState<{ qty: string; unit: string; note: string; files: File[] } | null>(null);
+  const [shopSubmitting, setShopSubmitting] = useState(false);
+  const shopImgRef = useRef<HTMLInputElement>(null);
+  const [carouselIdx, setCarouselIdx] = useState(0);
+  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
 
-  useEffect(() => { if (open) setConfirmDelete(false); }, [open, item?.id]);
+  useEffect(() => { if (open) { setConfirmDelete(false); setShopModal(null); setCarouselIdx(0); setLightboxIdx(null); } }, [open, item?.id]);
 
   const deleteMutation = useMutation({
     mutationFn: () => api.delete(`/api/pantry/items/${item!.id}`),
@@ -414,18 +429,36 @@ function ItemDetailModal({ item, open, onClose, onEdit }: {
     onError: (e) => toast.error(e instanceof ApiError ? e.message : 'Failed'),
   });
 
-  const pushToShoppingList = useMutation({
-    mutationFn: () => api.post('/api/shopping-list/items', { name: item!.ingredientName, source: 'PANTRY' }),
-    onSuccess: () => {
+  const confirmShopToList = async () => {
+    if (!shopModal || !item || shopSubmitting) return;
+    setShopSubmitting(true);
+    try {
+      const created = await api.post<{ id: string }>('/api/shopping-list/items', {
+        name: item.ingredientName,
+        source: 'PANTRY',
+        quantity: shopModal.qty ? Number(shopModal.qty) : null,
+        unit: shopModal.unit.trim() || null,
+        note: shopModal.note.trim() || null,
+      });
+      for (const file of shopModal.files) {
+        const form = new FormData();
+        form.append('image', file);
+        await api.postForm(`/api/shopping-list/items/${created.id}/images`, form).catch(() => {});
+      }
       void queryClient.invalidateQueries({ queryKey: queryKeys.shoppingList.items() });
+      setShopModal(null);
       toast.success('Added to shopping list');
-    },
-    onError: (e) => toast.error(e instanceof ApiError ? e.message : 'Failed'),
-  });
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Failed');
+    } finally {
+      setShopSubmitting(false);
+    }
+  };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="w-[calc(100vw-16px)] max-w-md p-0 gap-0 flex flex-col max-h-[90vh] overflow-hidden" hideClose>
+      <DialogContent className="w-[calc(100vw-16px)] max-w-lg p-0 gap-0 flex flex-col max-h-[90vh] overflow-hidden" hideClose>
         <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b">
           <div>
             {item && <h2 className="font-bold text-base">{item.ingredientName}</h2>}
@@ -439,13 +472,38 @@ function ItemDetailModal({ item, open, onClose, onEdit }: {
         {item && (
           <div className="flex-1 overflow-y-auto scrollbar-hide">
             <div className="p-4 space-y-4">
-              {/* Images */}
+              {/* Image carousel */}
               {item.images.length > 0 && (
-                <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-                  {item.images.map((img) => (
-                    <img key={img.id} src={img.url} alt=""
-                      className="h-28 w-28 shrink-0 rounded-xl object-cover border" />
-                  ))}
+                <div className="relative rounded-xl overflow-hidden bg-muted">
+                  <img src={item.images[carouselIdx].url} alt=""
+                    className="w-full h-40 object-cover"
+                    onError={(e) => { e.currentTarget.style.opacity = '0'; }} />
+                  {/* Expand button */}
+                  <button type="button"
+                    onClick={() => setLightboxIdx(carouselIdx)}
+                    className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-white text-[10px] font-medium hover:bg-black/70 transition-colors z-10">
+                    <Maximize2 className="h-3 w-3" />Expand
+                  </button>
+                  {item.images.length > 1 && (
+                    <>
+                      <button type="button"
+                        onClick={() => setCarouselIdx((i) => (i - 1 + item.images.length) % item.images.length)}
+                        className="absolute left-2 top-1/2 -translate-y-1/2 h-7 w-7 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors">
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <button type="button"
+                        onClick={() => setCarouselIdx((i) => (i + 1) % item.images.length)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors">
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+                        {item.images.map((_, i) => (
+                          <button key={i} type="button" onClick={() => setCarouselIdx(i)}
+                            className={cn('h-1.5 rounded-full transition-all', i === carouselIdx ? 'w-4 bg-white' : 'w-1.5 bg-white/50')} />
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -499,7 +557,7 @@ function ItemDetailModal({ item, open, onClose, onEdit }: {
         {item && !confirmDelete && (
           <div className="shrink-0 border-t px-4 py-3 flex gap-2">
             <Button variant="outline" size="sm" className="flex-1 h-8 text-xs gap-1.5"
-              onClick={() => pushToShoppingList.mutate()} disabled={pushToShoppingList.isPending}>
+              onClick={() => setShopModal({ qty: item?.quantity ? String(item.quantity) : '', unit: item?.unit ?? '', note: item?.notes ?? '', files: [] })}>
               <ShoppingCart className="h-3.5 w-3.5" />Shopping List
             </Button>
             <Button variant="outline" size="sm" className="flex-1 h-8 text-xs gap-1.5"
@@ -525,8 +583,135 @@ function ItemDetailModal({ item, open, onClose, onEdit }: {
             </div>
           </div>
         )}
+
+        {/* Lightbox — inside DialogContent so it fills the modal, not the full screen */}
+        {lightboxIdx !== null && item && item.images.length > 0 && (
+          <div
+            className="fixed inset-0 z-[200] bg-background/95 backdrop-blur-sm flex items-center justify-center"
+            onClick={() => setLightboxIdx(null)}>
+            <button type="button"
+              onClick={(e) => { e.stopPropagation(); setLightboxIdx(null); }}
+              className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
+              <X className="h-5 w-5" />
+            </button>
+            <img
+              src={item.images[lightboxIdx].url}
+              alt=""
+              className="max-h-[55%] max-w-[60%] object-contain rounded-xl shadow-2xl"
+              onClick={(e) => e.stopPropagation()} />
+            {item.images.length > 1 && (
+              <>
+                <button type="button"
+                  onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => ((i ?? 0) - 1 + item.images.length) % item.images.length); }}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <button type="button"
+                  onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => ((i ?? 0) + 1) % item.images.length); }}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-10">
+                  {item.images.map((_, i) => (
+                    <button key={i} type="button"
+                      onClick={(e) => { e.stopPropagation(); setLightboxIdx(i); }}
+                      className={cn('h-2 rounded-full transition-all', i === lightboxIdx ? 'w-6 bg-foreground' : 'w-2 bg-foreground/30')} />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
+
+    {/* Add to shopping list modal */}
+    <Dialog open={!!shopModal} onOpenChange={(o) => !o && setShopModal(null)}>
+      <DialogContent className="w-[calc(100vw-48px)] max-w-sm p-0 gap-0 flex flex-col max-h-[85vh] overflow-x-hidden" hideClose>
+        <div className="flex items-center justify-between px-4 py-3 border-b">
+          <div className="flex items-center gap-2">
+            <ShoppingCart className="h-4 w-4 text-primary" />
+            <h3 className="font-semibold text-sm">Add to Shopping List</h3>
+          </div>
+          <DialogClose className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-accent transition-colors">
+            <X className="h-4 w-4" />
+          </DialogClose>
+        </div>
+        {shopModal && item && (
+          <div className="px-4 py-4 space-y-3 overflow-y-auto flex-1">
+            <p className="text-sm font-medium">{item.ingredientName}</p>
+            {item.images.length > 0 && (
+              <img src={item.images[0].url} alt="" className="h-20 w-full object-cover rounded-xl border" />
+            )}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Quantity</label>
+              <div className="flex items-center gap-2">
+                <button type="button"
+                  onClick={() => setShopModal((m) => m ? { ...m, qty: String(Math.max(1, (Number(m.qty) || 0) - 1)) } : m)}
+                  className="h-8 w-8 shrink-0 flex items-center justify-center rounded-md border hover:bg-accent transition-colors text-muted-foreground">
+                  <Minus className="h-3.5 w-3.5" />
+                </button>
+                <input type="text" inputMode="numeric" className="h-8 flex-1 min-w-0 rounded-md border bg-background px-3 text-sm text-center"
+                  value={shopModal.qty}
+                  onChange={(e) => setShopModal((m) => m ? { ...m, qty: e.target.value } : m)} />
+                <button type="button"
+                  onClick={() => setShopModal((m) => m ? { ...m, qty: String((Number(m.qty) || 0) + 1) } : m)}
+                  className="h-8 w-8 shrink-0 flex items-center justify-center rounded-md border hover:bg-accent transition-colors text-muted-foreground">
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Unit</label>
+              <input type="text" placeholder="e.g. kg, cups…" className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                value={shopModal.unit}
+                onChange={(e) => setShopModal((m) => m ? { ...m, unit: e.target.value } : m)} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Note</label>
+              <input type="text" placeholder="Add a note…" className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                value={shopModal.note}
+                onChange={(e) => setShopModal((m) => m ? { ...m, note: e.target.value } : m)} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Images</label>
+              <div className="flex flex-wrap gap-2">
+                {shopModal.files.map((file, idx) => (
+                  <div key={idx} className="relative group">
+                    <img src={URL.createObjectURL(file)} alt="" className="h-16 w-16 rounded-lg object-cover border" />
+                    <button type="button"
+                      onClick={() => setShopModal((m) => m ? { ...m, files: m.files.filter((_, i) => i !== idx) } : m)}
+                      className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-foreground/80 text-background flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </div>
+                ))}
+                <button type="button"
+                  onClick={() => shopImgRef.current?.click()}
+                  className="h-16 w-16 rounded-lg border-2 border-dashed flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors">
+                  <Plus className="h-5 w-5" />
+                </button>
+                <input ref={shopImgRef} type="file" accept="image/*" multiple className="hidden"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files ?? []);
+                    if (files.length) setShopModal((m) => m ? { ...m, files: [...m.files, ...files] } : m);
+                    e.target.value = '';
+                  }} />
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => setShopModal(null)}>Cancel</Button>
+              <Button className="flex-1" disabled={shopSubmitting}
+                onClick={() => { void confirmShopToList(); }}>
+                {shopSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Add to List'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+
+    </>
   );
 }
 
@@ -569,7 +754,6 @@ function IngredientSearchPanel({ open, onClose, pantryItems, onOpenRecipe }: {
       const params = new URLSearchParams();
       if (selected.size > 0) {
         params.set('ingredients', [...selected].join(','));
-        params.set('strict', 'true');
       }
       let data: SearchResult[] = [];
       if (scope === 'all' || scope === 'mine') {
@@ -713,8 +897,8 @@ function IngredientSearchPanel({ open, onClose, pantryItems, onOpenRecipe }: {
                 <button key={`${r._source}-${r.id}`} type="button"
                   onClick={() => { onOpenRecipe(r.id, r._source); onClose(); }}
                   className="w-full flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5 hover:bg-accent/30 transition-colors text-left">
-                  {r.imageUrl ? (
-                    <img src={r.imageUrl} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
+                  {r.images?.[0] ? (
+                    <img src={r.images[0]} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
                   ) : (
                     <div className="h-12 w-12 shrink-0 rounded-lg bg-muted flex items-center justify-center">
                       <ChefHat className="h-5 w-5 text-muted-foreground" />
@@ -744,37 +928,42 @@ function IngredientSearchPanel({ open, onClose, pantryItems, onOpenRecipe }: {
 
 function PantryItemCard({ item, onClick }: { item: PantryItem; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick}
-      className="group w-full text-left rounded-2xl border bg-card px-4 py-3 hover:shadow-md hover:border-primary/30 transition-all flex items-center gap-3">
-      <div className="shrink-0 flex h-10 w-10 items-center justify-center rounded-xl bg-muted overflow-hidden">
-        {item.images[0] ? (
-          <img src={item.images[0].url} alt="" className="h-10 w-10 rounded-xl object-cover" />
-        ) : (
-          <Package className="h-5 w-5 text-muted-foreground" />
+    <button type="button"
+      className="flex items-center gap-3 rounded-xl border bg-card px-3 py-3 w-full text-left hover:bg-accent/40 hover:border-primary/30 transition-all cursor-pointer"
+      onClick={onClick}>
+      <div className="min-w-0 flex-1 space-y-0.5">
+        <p className="text-sm font-semibold leading-snug line-clamp-1">{item.ingredientName}</p>
+        <span className={cn(
+          'inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none',
+          item.inStock
+            ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+            : 'bg-rose-500/15 text-rose-600 dark:text-rose-400',
+        )}>
+          <span className={cn('h-1 w-1 rounded-full shrink-0', item.inStock ? 'bg-emerald-500' : 'bg-rose-500')} />
+          {item.inStock ? 'In Stock' : 'Out of Stock'}
+        </span>
+        {item.notes && (
+          <p className="text-[10px] text-muted-foreground line-clamp-1">{item.notes}</p>
         )}
       </div>
-      <div className="flex-1 min-w-0">
-        <p className="font-semibold text-sm truncate">{item.ingredientName}</p>
-        {(item.quantity || item.unit) && (
-          <p className="text-[11px] text-muted-foreground truncate mt-0.5">
-            {item.quantity}{item.quantity && item.unit ? ' ' : ''}{item.unit}
-          </p>
-        )}
-        {item.notes && !item.quantity && !item.unit && (
-          <p className="text-[11px] text-muted-foreground truncate mt-0.5">{item.notes}</p>
-        )}
-      </div>
-      <div className={cn('shrink-0 h-2.5 w-2.5 rounded-full', item.inStock ? 'bg-emerald-500' : 'bg-rose-500')} />
+      <ChevronRight className="h-4 w-4 text-muted-foreground/40 shrink-0" />
     </button>
   );
 }
 
 // ─── Category Group ───────────────────────────────────────────────────────────
 
+const CAT_PAGE_SIZE = 8;
+
 function CategoryGroup({ label, items, onItemClick }: {
   label: string; items: PantryItem[]; onItemClick: (item: PantryItem) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [catPage, setCatPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(items.length / CAT_PAGE_SIZE));
+  const safePage = Math.min(catPage, totalPages);
+  const pageItems = items.slice((safePage - 1) * CAT_PAGE_SIZE, safePage * CAT_PAGE_SIZE);
+
   return (
     <div className="space-y-2">
       <button type="button" onClick={() => setCollapsed((c) => !c)}
@@ -787,11 +976,28 @@ function CategoryGroup({ label, items, onItemClick }: {
           : <ChevronUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
       </button>
       {!collapsed && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          {items.map((item) => (
-            <PantryItemCard key={item.id} item={item} onClick={() => onItemClick(item)} />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+            {pageItems.map((item) => (
+              <PantryItemCard key={item.id} item={item} onClick={() => onItemClick(item)} />
+            ))}
+          </div>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-1">
+              <button type="button" disabled={safePage === 1}
+                onClick={() => setCatPage((p) => p - 1)}
+                className="flex h-7 w-7 items-center justify-center rounded-lg border bg-card text-muted-foreground disabled:opacity-30 hover:bg-accent transition-colors">
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </button>
+              <span className="text-[11px] text-muted-foreground">{safePage} / {totalPages}</span>
+              <button type="button" disabled={safePage === totalPages}
+                onClick={() => setCatPage((p) => p + 1)}
+                className="flex h-7 w-7 items-center justify-center rounded-lg border bg-card text-muted-foreground disabled:opacity-30 hover:bg-accent transition-colors">
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -809,6 +1015,7 @@ function PantryPage() {
   const [editItem, setEditItem] = useState<PantryItem | null>(null);
   const [categoryPanelOpen, setCategoryPanelOpen] = useState(false);
   const [searchPanelOpen, setSearchPanelOpen] = useState(false);
+  const [pantrySearch, setPantrySearch] = useState('');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
 
@@ -826,6 +1033,7 @@ function PantryPage() {
     if (activeCategoryId && item.categoryId !== activeCategoryId) return false;
     if (stockFilter === 'in' && !item.inStock) return false;
     if (stockFilter === 'out' && item.inStock) return false;
+    if (pantrySearch.trim() && !item.ingredientName.toLowerCase().includes(pantrySearch.toLowerCase().trim())) return false;
     return true;
   });
 
@@ -844,7 +1052,7 @@ function PantryPage() {
 
   const hasActiveFilters = activeCategoryId !== null || stockFilter !== 'all';
 
-  useEffect(() => { setPage(1); }, [activeCategoryId, stockFilter]);
+  useEffect(() => { setPage(1); }, [activeCategoryId, stockFilter, pantrySearch]);
 
   const handleOpenEdit = (item: PantryItem) => {
     setSelectedItem(null);
@@ -865,17 +1073,39 @@ function PantryPage() {
           Track what your household has in stock. Items link to recipes and your shopping list.
         </p>
 
-        {/* Action row */}
-        <div className="flex gap-2 mb-2">
-          <Button className="flex-1 gap-1.5 h-9 text-sm" onClick={() => { setEditItem(null); setAddOpen(true); }}>
+        {/* Row 1: Add Item + Manage Categories (exact 50/50) */}
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <Button className="w-full gap-1.5 h-9 text-sm" onClick={() => { setEditItem(null); setAddOpen(true); }}>
             <Plus className="h-4 w-4" />Add Item
           </Button>
-          <Button variant="outline" className="flex-1 gap-1.5 h-9 text-sm" onClick={() => setSearchPanelOpen(true)}>
-            <Search className="h-4 w-4" />Find Recipes
+          <Button variant="outline" className="w-full gap-1.5 h-9 text-sm" onClick={() => setCategoryPanelOpen(true)}>
+            <Tag className="h-4 w-4" />Manage Categories
           </Button>
         </div>
 
-        {/* Filter + categories row */}
+        {/* Row 2: Search Pantry + Find by Ingredient (exact 50/50) */}
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              className="h-9 pl-9 pr-9 text-sm w-full"
+              placeholder="Search pantry…"
+              value={pantrySearch}
+              onChange={(e) => setPantrySearch(e.target.value)}
+            />
+            {pantrySearch && (
+              <button type="button" onClick={() => setPantrySearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <Button variant="outline" className="w-full gap-1.5 h-9 text-sm" onClick={() => setSearchPanelOpen(true)}>
+            <Search className="h-4 w-4" />Find by Ingredient
+          </Button>
+        </div>
+
+        {/* Row 3: Filters */}
         <div className="flex gap-2 mb-2">
           <button type="button" onClick={() => setFiltersOpen((v) => !v)}
             className="flex items-center gap-2 px-3 h-9 rounded-xl border border-border/60 bg-card/50 text-left hover:bg-accent/30 transition-colors">
@@ -884,9 +1114,6 @@ function PantryPage() {
             {hasActiveFilters && <span className="h-2 w-2 rounded-full bg-primary shrink-0" />}
             <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 shrink-0', filtersOpen && 'rotate-180')} />
           </button>
-          <Button variant="outline" className="gap-1.5 h-9 text-sm" onClick={() => setCategoryPanelOpen(true)}>
-            <Tag className="h-4 w-4" />Categories
-          </Button>
         </div>
 
         {/* Filter panel */}
@@ -973,7 +1200,7 @@ function PantryPage() {
         ) : (
           <div className="space-y-6">
             {activeCategoryId ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
                 {pagedItems.map((item) => (
                   <PantryItemCard key={item.id} item={item} onClick={() => setSelectedItem(item)} />
                 ))}
@@ -1044,6 +1271,7 @@ function PantryPage() {
           }
         }}
       />
+
     </div>
   );
 }
