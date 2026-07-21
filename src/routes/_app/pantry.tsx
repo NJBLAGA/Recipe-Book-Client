@@ -1062,7 +1062,7 @@ function PantryPage() {
 
   return (
     <div className="flex flex-col items-center px-4 pb-24 pt-6">
-      <div className="w-full max-w-md sm:max-w-xl lg:max-w-3xl xl:max-w-5xl">
+      <div data-timer-align className="w-full max-w-md sm:max-w-xl lg:max-w-3xl xl:max-w-5xl">
 
         {/* Header */}
         <div className="mb-1 flex items-center gap-2">

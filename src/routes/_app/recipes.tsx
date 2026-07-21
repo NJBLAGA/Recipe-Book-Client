@@ -22,6 +22,7 @@ import { api, ApiError } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
 import { useMeasureSystem } from '@/hooks/useMeasureSystem';
 import type { MeasureSystem } from '@/hooks/useMeasureSystem';
+import { useTimerContext } from '@/contexts/TimerContext';
 
 export const Route = createFileRoute('/_app/recipes')({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -1470,6 +1471,16 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
   const effective = servings ?? base;
   const images = recipe?.images ? [...recipe.images].sort((a, b) => a.sortOrder - b.sortOrder) : [];
   const isCooking = !!cookSession;
+  const { state: timerState, setTimerOpen } = useTimerContext();
+
+  function fmtMs(ms: number) {
+    const total = Math.max(0, Math.ceil(ms / 1000));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
 
   return (
     <>
@@ -1532,6 +1543,35 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
+              )}
+              {isCooking && (
+                <button
+                  type="button"
+                  onClick={() => setTimerOpen(true)}
+                  title={timerState.status !== 'idle' && timerState.label && timerState.label !== 'Timer' ? timerState.label : 'Cooking timer'}
+                  className={cn(
+                    'flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold shrink-0 transition-colors cursor-pointer',
+                    timerState.status === 'done'
+                      ? 'bg-green-500 text-white border-green-400'
+                      : timerState.status !== 'idle'
+                      ? 'bg-card border-border text-foreground hover:bg-accent'
+                      : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground',
+                  )}>
+                  {timerState.status === 'done' ? (
+                    <span>⏰</span>
+                  ) : (
+                    <Clock className={cn('h-3.5 w-3.5 shrink-0', timerState.status === 'running' ? 'text-primary animate-pulse' : timerState.status === 'idle' && 'text-muted-foreground')} />
+                  )}
+                  {timerState.status === 'running' && (
+                    <span className="tabular-nums">{fmtMs(timerState.remainingMs)}</span>
+                  )}
+                  {timerState.status === 'paused' && (
+                    <span className="tabular-nums opacity-50">{fmtMs(timerState.remainingMs)}</span>
+                  )}
+                  {timerState.status === 'done' && (
+                    <span>Time's up!</span>
+                  )}
+                </button>
               )}
             </div>
             {recipe.categoryName && (
@@ -2654,6 +2694,37 @@ function HistoryUserModal({ user, onClose, onViewRecipe }: {
   );
 }
 
+// ─── Timer toolbar button (isolated to avoid re-rendering the whole page on every tick) ──
+
+function TimerToolbarButton() {
+  const { state, setTimerOpen } = useTimerContext();
+  const isActive = state.status !== 'idle';
+  const total = Math.max(0, Math.ceil(state.remainingMs / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const countdown = h > 0
+    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+
+  return (
+    <button type="button" onClick={() => setTimerOpen(true)}
+      className="h-9 flex items-center gap-1.5 px-3 rounded-xl border border-border/60 bg-card/50 hover:bg-accent/30 transition-colors shrink-0 relative">
+      <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+      {isActive ? (
+        <span className={cn('text-xs font-mono font-semibold tabular-nums', state.status === 'paused' && 'opacity-50')}>
+          {countdown}
+        </span>
+      ) : (
+        <span className="text-xs font-medium">Timer</span>
+      )}
+      {state.status === 'running' && (
+        <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-green-500 animate-pulse" />
+      )}
+    </button>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 function RecipesPage() {
@@ -2667,6 +2738,7 @@ function RecipesPage() {
   const [canMakeFilter, setCanMakeFilter] = useState<'all' | 'can-make'>('all');
   const [letterFilter, setLetterFilter] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [inProgressOnly, setInProgressOnly] = useState(false);
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<'idle' | 'scan' | 'url'>('idle');
@@ -2706,13 +2778,16 @@ function RecipesPage() {
   const { data: inProgressSessions = [] } = useQuery({
     queryKey: ['cook-sessions', 'household-in-progress'],
     queryFn: () => api.get<InProgressSession[]>('/api/cook-sessions/household-in-progress'),
-    enabled: activeTab === 'history',
     refetchInterval: 30000,
   });
 
   const canMakeIds = canMake
     ? new Set([...canMake.ready.map((r) => r.id), ...canMake.almost.map((r) => r.id)])
     : null;
+
+  const inProgressRecipeIds = new Set(
+    inProgressSessions.flatMap((s) => (s.recipeId ? [s.recipeId] : [])),
+  );
 
   const sortedRecipes = [...recipes].sort((a, b) => {
     if (sortBy === 'z-alpha') return b.title.localeCompare(a.title);
@@ -2724,10 +2799,11 @@ function RecipesPage() {
   const displayedRecipes = sortedRecipes.filter((r) => {
     if (letterFilter && !r.title.toUpperCase().startsWith(letterFilter)) return false;
     if (canMakeFilter === 'can-make' && canMakeIds && !canMakeIds.has(r.id)) return false;
+    if (inProgressOnly && !inProgressRecipeIds.has(r.id)) return false;
     return true;
   });
 
-  const hasActiveFilters = activeCategoryId !== null || sortBy !== 'alpha' || canMakeFilter !== 'all';
+  const hasActiveFilters = activeCategoryId !== null || sortBy !== 'alpha' || canMakeFilter !== 'all' || inProgressOnly;
 
   // Open a specific recipe modal when navigated here with ?openRecipeId=...
   useEffect(() => {
@@ -2775,7 +2851,7 @@ function RecipesPage() {
 
   return (
     <div className="flex flex-col items-center px-4 pb-24 pt-6">
-      <div className="w-full max-w-md sm:max-w-xl lg:max-w-3xl xl:max-w-5xl">
+      <div data-timer-align className="w-full max-w-md sm:max-w-xl lg:max-w-3xl xl:max-w-5xl">
 
         {/* Header */}
         <div className="mb-1 flex items-center gap-2">
@@ -2852,9 +2928,9 @@ function RecipesPage() {
           </div>
         )}
 
-        {/* Search + Filter — 50/50 */}
+        {/* Search + Filter + Timer */}
         <div className="flex gap-2 mb-2">
-          <div className="w-1/2 relative">
+          <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
             <Input className="h-9 pl-9 pr-8 text-sm w-full" placeholder="Search recipes…"
               value={search} onChange={(e) => handleSearch(e.target.value)} autoComplete="off" />
@@ -2865,15 +2941,14 @@ function RecipesPage() {
               </button>
             )}
           </div>
-          <div className="w-1/2">
-            <button type="button" onClick={() => setFiltersOpen((v) => !v)}
-              className="w-full h-9 flex items-center gap-2 px-3 rounded-xl border border-border/60 bg-card/50 text-left hover:bg-accent/30 transition-colors">
-              <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              <span className="text-xs font-medium flex-1">Filters</span>
-              {hasActiveFilters && <span className="h-2 w-2 rounded-full bg-primary shrink-0" />}
-              <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 shrink-0', filtersOpen && 'rotate-180')} />
-            </button>
-          </div>
+          <button type="button" onClick={() => setFiltersOpen((v) => !v)}
+            className="h-9 flex items-center gap-1.5 px-3 rounded-xl border border-border/60 bg-card/50 text-left hover:bg-accent/30 transition-colors shrink-0">
+            <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span className="text-xs font-medium">Filters</span>
+            {hasActiveFilters && <span className="h-2 w-2 rounded-full bg-primary shrink-0" />}
+            <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 shrink-0', filtersOpen && 'rotate-180')} />
+          </button>
+          <TimerToolbarButton />
         </div>
 
         {/* Filter panel */}
@@ -2940,9 +3015,29 @@ function RecipesPage() {
                 )}
               </div>
 
+              {/* Cook Status */}
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Cook Status</p>
+                <div className="flex flex-wrap gap-1.5">
+                  <button type="button" onClick={() => setInProgressOnly(false)}
+                    className={cn('rounded-full px-3 py-1 text-xs font-medium border transition-colors',
+                      !inProgressOnly ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:text-foreground')}>
+                    All Recipes
+                  </button>
+                  <button type="button" onClick={() => setInProgressOnly(true)}
+                    className={cn('rounded-full px-3 py-1 text-xs font-medium border transition-colors',
+                      inProgressOnly ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:text-foreground')}>
+                    🍳 In Progress
+                  </button>
+                </div>
+                {inProgressOnly && inProgressSessions.length === 0 && (
+                  <p className="text-[10px] text-muted-foreground">No recipes are currently being cooked.</p>
+                )}
+              </div>
+
               {hasActiveFilters && (
                 <button type="button"
-                  onClick={() => { setActiveCategoryId(null); setSortBy('alpha'); setCanMakeFilter('all'); }}
+                  onClick={() => { setActiveCategoryId(null); setSortBy('alpha'); setCanMakeFilter('all'); setInProgressOnly(false); }}
                   className="text-[11px] text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2">
                   Clear all filters
                 </button>
@@ -3018,6 +3113,7 @@ function RecipesPage() {
         onClose={() => setHistoryUser(null)}
         onViewRecipe={(id) => { setHistoryUser(null); setSelectedRecipeId(id); }}
       />
+
     </div>
   );
 }

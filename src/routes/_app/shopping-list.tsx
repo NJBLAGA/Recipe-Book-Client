@@ -639,15 +639,12 @@ function ShoppingListPage() {
 
   return (
     <div className="flex flex-col items-center px-4 pb-24 pt-6">
-      <div className="w-full max-w-3xl lg:max-w-5xl xl:max-w-6xl">
+      <div data-timer-align className="w-full max-w-3xl lg:max-w-5xl xl:max-w-6xl">
 
         {/* Header */}
         <div className="mb-1 flex items-center gap-2">
           <ShoppingCart className="h-5 w-5 text-primary shrink-0" />
           <h1 className="text-xl font-bold">Shopping List</h1>
-          {items.length > 0 && (
-            <span className="text-xs text-muted-foreground ml-0.5">{checkedCount}/{items.length}</span>
-          )}
         </div>
         <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
           Shared household list. Items added from recipes and pantry appear here automatically.
@@ -732,6 +729,14 @@ function ShoppingListPage() {
                 </button>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Item count */}
+        {items.length > 0 && (
+          <div className="flex items-baseline gap-1.5 py-3 border-b border-border/50 mb-1">
+            <span className="text-lg font-bold tabular-nums">{checkedCount}/{items.length}</span>
+            <span className="text-sm text-muted-foreground">items</span>
           </div>
         )}
 

@@ -1,10 +1,14 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useEffect } from 'react';
-import { BookOpenText, ShoppingCart, Refrigerator, Users, UserCircle } from 'lucide-react';
+import { BookOpenText, ShoppingCart, Refrigerator, Users, UserCircle, Clock, X } from 'lucide-react';
 import { authClient } from '@/lib/auth';
 import { useHousehold } from '@/hooks/useHousehold';
 import { useMe } from '@/hooks/useMe';
 import { cn } from '@/lib/utils';
+import { TimerProvider, useTimerContext } from '@/contexts/TimerContext';
+import { FloatingTimer } from '@/components/FloatingTimer';
+import { TimerWidget } from '@/components/TimerWidget';
+import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog';
 
 export const Route = createFileRoute('/_app')({
   component: AppLayout,
@@ -23,6 +27,28 @@ function Spinner() {
     <div className="flex min-h-svh items-center justify-center">
       <div className="border-primary/30 h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" />
     </div>
+  );
+}
+
+function TimerDialog() {
+  const { timerOpen, setTimerOpen } = useTimerContext();
+  return (
+    <Dialog open={timerOpen} onOpenChange={setTimerOpen}>
+      <DialogContent className="w-[calc(100vw-32px)] max-w-sm p-0 gap-0">
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b">
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-base font-semibold">Cooking Timer</h2>
+          </div>
+          <DialogClose className="rounded-full p-1 hover:bg-accent transition-colors text-muted-foreground">
+            <X className="h-4 w-4" />
+          </DialogClose>
+        </div>
+        <div className="px-5 py-5">
+          <TimerWidget />
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -76,6 +102,9 @@ function AppLayout() {
     : navItems;
 
   return (
+    <TimerProvider>
+      <TimerDialog />
+      <FloatingTimer />
     <div className="flex min-h-svh flex-col">
       <main className="flex-1 pb-20">
         <Outlet />
@@ -123,5 +152,6 @@ function AppLayout() {
         </div>
       </nav>
     </div>
+    </TimerProvider>
   );
 }

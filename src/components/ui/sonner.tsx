@@ -20,6 +20,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
       theme={resolvedTheme as 'light' | 'dark'}
       className="toaster group"
       closeButton={true}
+      richColors={true}
       position="top-center"
       icons={{
         success: <CircleCheck className="h-4 w-4" />,

@@ -1406,7 +1406,15 @@ function CommunityPage() {
 
   return (
     <div className="flex flex-col items-center px-4 pb-24 pt-6">
-      <div className="w-full max-w-md sm:max-w-xl lg:w-[65%] lg:max-w-5xl xl:max-w-[1400px]">
+      <div data-timer-align className="w-full max-w-md sm:max-w-xl lg:w-[65%] lg:max-w-5xl xl:max-w-[1400px]">
+        <div className="mb-1 flex items-center gap-2">
+          <Users className="h-5 w-5 text-primary shrink-0" />
+          <h1 className="text-xl font-bold">Community</h1>
+        </div>
+        <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
+          Discover recipes shared by other users, follow members you love, and share your own creations.
+        </p>
+
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <div className="rounded-t-2xl border border-b-0 overflow-hidden">
             <TabsList className="w-full h-12 rounded-none bg-card border-b p-0 gap-0">

@@ -12,7 +12,7 @@ import {
   DoorOpen, ArrowLeftRight, Mail, Crown, Home, TriangleAlert,
   Star, UtensilsCrossed, X, UserPlus, Search, ChevronUp, ChevronDown,
   Plus, Globe, Lock, Send, BookOpen, Eye, Copy, Users,
-  ChevronLeft, ChevronRight, Scale, ChefHat, Maximize2,
+  ChevronLeft, ChevronRight, Scale, ChefHat, Maximize2, UserCircle,
 } from 'lucide-react';
 import { authClient } from '@/lib/auth';
 import { api, ApiError } from '@/lib/api';
@@ -262,7 +262,15 @@ function ProfilePage() {
 
   return (
     <div className="flex flex-col items-center px-4 pb-24 pt-6">
-      <div className="w-full max-w-md sm:max-w-xl lg:max-w-2xl xl:max-w-3xl">
+      <div data-timer-align className="w-full max-w-md sm:max-w-xl lg:max-w-2xl xl:max-w-3xl">
+        <div className="mb-1 flex items-center gap-2">
+          <UserCircle className="h-5 w-5 text-primary shrink-0" />
+          <h1 className="text-xl font-bold">My Profile</h1>
+        </div>
+        <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
+          Manage your account settings, household members, and notifications.
+        </p>
+
         <Tabs defaultValue="settings">
           <div className="rounded-t-2xl border border-b-0 overflow-hidden">
             <TabsList className="w-full h-12 rounded-none bg-card border-b p-0 gap-0">
