@@ -384,7 +384,6 @@ function CategorySection({ label, items, onToggle, onMove, onView }: {
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [catPage, setCatPage] = useState(1);
-  const checkedCount = items.filter((i) => i.isChecked).length;
   const totalPages = Math.max(1, Math.ceil(items.length / SHOP_CAT_PAGE_SIZE));
   const safePage = Math.min(catPage, totalPages);
   const pageItems = items.slice((safePage - 1) * SHOP_CAT_PAGE_SIZE, safePage * SHOP_CAT_PAGE_SIZE);
@@ -394,7 +393,7 @@ function CategorySection({ label, items, onToggle, onMove, onView }: {
       <button type="button" onClick={() => setCollapsed((c) => !c)}
         className="flex w-full items-center gap-2 text-left py-0.5">
         <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{label}</span>
-        <span className="text-[10px] text-muted-foreground">{checkedCount}/{items.length}</span>
+        <span className="text-[10px] text-muted-foreground">({items.length})</span>
         <span className="flex-1 h-px bg-border" />
         {collapsed
           ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -734,9 +733,8 @@ function ShoppingListPage() {
 
         {/* Item count */}
         {items.length > 0 && (
-          <div className="flex items-baseline gap-1.5 py-3 border-b border-border/50 mb-1">
-            <span className="text-lg font-bold tabular-nums">{checkedCount}/{items.length}</span>
-            <span className="text-sm text-muted-foreground">items</span>
+          <div className="flex items-center mb-4 text-[11px] text-muted-foreground">
+            <span className="ml-auto text-[10px]">{items.length} item{items.length !== 1 ? 's' : ''}</span>
           </div>
         )}
 
