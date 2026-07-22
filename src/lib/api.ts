@@ -17,6 +17,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!res.ok) {
+    if (res.status === 401) {
+      // Session expired — clear any cached state and redirect to sign-in.
+      // Import queryClient lazily to avoid a circular import at module load.
+      const { queryClient } = await import('./query');
+      queryClient.clear();
+      window.location.href = '/sign-in';
+      throw new ApiError(401, 'Session expired');
+    }
     const body = await res.json().catch(() => ({}));
     throw new ApiError(res.status, body.message ?? body.error ?? res.statusText);
   }
@@ -28,6 +36,12 @@ async function requestForm<T>(path: string, body: FormData, method = 'POST'): Pr
   const res = await fetch(path, { method, credentials: 'include', body });
 
   if (!res.ok) {
+    if (res.status === 401) {
+      const { queryClient } = await import('./query');
+      queryClient.clear();
+      window.location.href = '/sign-in';
+      throw new ApiError(401, 'Session expired');
+    }
     const b = await res.json().catch(() => ({}));
     throw new ApiError(res.status, b.message ?? b.error ?? res.statusText);
   }

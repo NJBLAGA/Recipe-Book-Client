@@ -241,8 +241,8 @@ export function useTimer() {
           }
         }
 
-        try { localStorage.setItem(PREV_TIMER_KEY, JSON.stringify({ durationMs, label, reminders })); } catch {}
-        writeStorage({ status: 'running', timerId: timer.id, reminderTimerIds, endsAt, label, reminders });
+        try { localStorage.setItem(PREV_TIMER_KEY, JSON.stringify({ durationMs, label: label.slice(0, 200), reminders })); } catch {}
+        writeStorage({ status: 'running', timerId: timer.id, reminderTimerIds, endsAt, label: label.slice(0, 200), reminders });
         setState({ status: 'running', remainingMs: durationMs, label, timerId: timer.id, reminderTimerIds, reminders });
         startInterval(endsAt, reminders, label, () => {
           clearStorage();

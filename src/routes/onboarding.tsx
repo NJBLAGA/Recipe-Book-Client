@@ -5,7 +5,7 @@ import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { BookOpenText, Sparkles, Users, Mail, CheckCircle2, XCircle, Search } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { authClient } from '@/lib/auth';
 import { api, ApiError } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
@@ -133,33 +133,39 @@ function OnboardingPage() {
     },
   });
 
+  const pendingRequestRef = useRef<Set<string>>(new Set());
+
   const requestMutation = useMutation({
     mutationFn: (householdId: string) => api.post(`/api/households/${householdId}/requests`),
     onSuccess: (_data, householdId) => {
       setRequestedHouseholds((prev) => new Set([...prev, householdId]));
+      pendingRequestRef.current.delete(householdId);
       toast.success('Join request sent');
     },
-    onError: (err) => {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to send request');
+    onError: (_err, householdId) => {
+      pendingRequestRef.current.delete(householdId);
+      toast.error(_err instanceof ApiError ? _err.message : 'Failed to send request');
     },
   });
 
-  if (sessionPending || householdLoading) {
+  useEffect(() => {
+    if (!sessionPending && !householdLoading && !session) {
+      void navigate({ to: '/sign-in' });
+    }
+  }, [sessionPending, householdLoading, session, navigate]);
+
+  useEffect(() => {
+    if (!sessionPending && !householdLoading && household !== null) {
+      void navigate({ to: '/' });
+    }
+  }, [sessionPending, householdLoading, household, navigate]);
+
+  if (sessionPending || householdLoading || !session || household !== null) {
     return (
       <div className="flex min-h-svh items-center justify-center">
         <div className="border-primary/30 h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" />
       </div>
     );
-  }
-
-  if (!session) {
-    void navigate({ to: '/sign-in' });
-    return null;
-  }
-
-  if (household !== null) {
-    void navigate({ to: '/' });
-    return null;
   }
 
   const invites = pending?.invites ?? [];
@@ -306,7 +312,11 @@ function OnboardingPage() {
                         size="sm"
                         variant={alreadyRequested ? 'secondary' : 'default'}
                         disabled={alreadyRequested || requestMutation.isPending}
-                        onClick={() => !alreadyRequested && requestMutation.mutate(u.householdId!)}
+                        onClick={() => {
+                          if (alreadyRequested || pendingRequestRef.current.has(u.householdId!)) return;
+                          pendingRequestRef.current.add(u.householdId!);
+                          requestMutation.mutate(u.householdId!);
+                        }}
                       >
                         {alreadyRequested ? 'Requested' : 'Request'}
                       </Button>
@@ -380,7 +390,7 @@ function OnboardingPage() {
             type="button"
             className="underline-offset-4 hover:underline hover:text-foreground transition-colors"
             onClick={() => {
-              localStorage.setItem('householdSkipped', 'true');
+              sessionStorage.setItem('householdSkipped', 'true');
               void navigate({ to: '/profile' });
             }}
           >

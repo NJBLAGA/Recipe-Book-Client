@@ -6,7 +6,11 @@ const STORAGE_KEY = 'measurementSystem';
 const EVENT_NAME = 'measurechange';
 
 export function getMeasureDefault(): MeasureSystem {
-  return (localStorage.getItem(STORAGE_KEY) as MeasureSystem | null) ?? 'metric';
+  try {
+    const v = localStorage.getItem(STORAGE_KEY);
+    if (v === 'imperial') return 'imperial';
+  } catch {}
+  return 'metric';
 }
 
 export function useMeasureSystem(): [MeasureSystem, (s: MeasureSystem) => void] {

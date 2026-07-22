@@ -65,12 +65,12 @@ function AppLayout() {
     !!session &&
     !householdLoading &&
     household === null &&
-    localStorage.getItem('householdSkipped') === 'true';
+    sessionStorage.getItem('householdSkipped') === 'true';
 
   // Clear the waiting flag as soon as the user joins a household
   useEffect(() => {
     if (household !== null) {
-      localStorage.removeItem('householdSkipped');
+      sessionStorage.removeItem('householdSkipped');
     }
   }, [household]);
 

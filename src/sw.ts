@@ -13,11 +13,14 @@ registerRoute(new NavigationRoute(createHandlerBoundToURL('index.html')));
 
 self.addEventListener('push', (event) => {
   if (!event.data) return;
-  const data = event.data.json() as { title: string; body: string; tag?: string };
+  const rawData = event.data.json() as Record<string, unknown>;
+  const title = typeof rawData.title === 'string' ? rawData.title : 'Recipe Book';
+  const body = typeof rawData.body === 'string' ? rawData.body : '';
+  const tag = typeof rawData.tag === 'string' ? rawData.tag : 'timer';
   event.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
-      tag: data.tag ?? 'timer',
+    self.registration.showNotification(title, {
+      body,
+      tag,
       icon: '/favicon.svg',
       badge: '/favicon.svg',
     }),

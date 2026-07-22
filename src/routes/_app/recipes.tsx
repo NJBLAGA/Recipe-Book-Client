@@ -135,6 +135,7 @@ function round(n: number): string {
 
 function scaleQty(qty: string | null, base: number, target: number): string | null {
   if (!qty) return null;
+  if (!base || base <= 0) return qty;
   const n = parseFloat(qty);
   if (isNaN(n)) return qty;
   return round((n * target) / base);
@@ -227,6 +228,35 @@ function extractedToRows(ings: ExtractedRecipe['ingredients']): Array<Ingredient
     note: ing.note ?? '',
     sortOrder: i,
   }));
+}
+
+// ─── File Preview (revokes blob URLs on unmount to prevent memory leaks) ──────
+
+function FilePreview({ file, className, onRemove }: {
+  file: File;
+  className?: string;
+  onRemove?: () => void;
+}) {
+  const [src, setSrc] = useState('');
+  useEffect(() => {
+    const url = URL.createObjectURL(file);
+    setSrc(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+  return (
+    <div className="relative group">
+      <img src={src} alt="" className={className ?? 'h-16 w-16 rounded-lg object-cover border'} />
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+        >
+          <X className="h-2.5 w-2.5" />
+        </button>
+      )}
+    </div>
+  );
 }
 
 // ─── Confetti ─────────────────────────────────────────────────────────────────
@@ -381,12 +411,15 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
       setUrlError('');
       setPasteText('');
       setPastePhase('input');
-      setFormImages(
-        (existingImages ?? [])
+      setFormImages((prev) => {
+        prev.forEach((img) => {
+          if (!img.id && img.url.startsWith('blob:')) URL.revokeObjectURL(img.url);
+        });
+        return (existingImages ?? [])
           .slice()
           .sort((a, b) => a.sortOrder - b.sortOrder)
-          .map((img) => ({ id: img.id, url: img.url, toDelete: false })),
-      );
+          .map((img) => ({ id: img.id, url: img.url, toDelete: false }));
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -564,14 +597,21 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
         await api.delete(`/api/recipe-book/recipes/${recipeId}/images/${img.id}`);
       }
 
-      // Upload new images, collect IDs
+      // Upload new images in parallel, report partial failures without blocking save
       const newImgs = activeFormImages.filter((i) => i.file);
-      const uploadedIds: Array<{ id: string }> = [];
-      for (const img of newImgs) {
-        const fd = new FormData();
-        fd.append('image', img.file!);
-        const result = await api.postForm<{ id: string }>(`/api/recipe-book/recipes/${recipeId}/images`, fd);
-        uploadedIds.push(result);
+      const uploadResults = await Promise.allSettled(
+        newImgs.map((img) => {
+          const fd = new FormData();
+          fd.append('image', img.file!);
+          return api.postForm<{ id: string }>(`/api/recipe-book/recipes/${recipeId}/images`, fd);
+        })
+      );
+      const uploadedIds = uploadResults
+        .filter((r): r is PromiseFulfilledResult<{ id: string }> => r.status === 'fulfilled')
+        .map((r) => r.value);
+      const failedCount = uploadResults.filter((r) => r.status === 'rejected').length;
+      if (failedCount > 0) {
+        toast.warning(`Recipe saved, but ${failedCount} photo(s) failed to upload — try re-adding them`);
       }
 
       // Patch final sort order across all surviving images
@@ -1189,7 +1229,9 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
   const [shopSubmitting, setShopSubmitting] = useState(false);
   const shopImgRef = useRef<HTMLInputElement>(null);
   const [completing, setCompleting] = useState(false);
+  const completingRef = useRef(false);
   const saveTickRef = useRef<ReturnType<typeof setTimeout>>();
+  const persistFailRef = useRef(0);
 
   const { data: recipe, isLoading } = useQuery({
     queryKey: queryKeys.recipeBook.recipe(recipeId ?? ''),
@@ -1333,7 +1375,14 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
             extraChanges: session.pendingChanges?.extraChanges ?? [],
           },
         });
-      } catch {}
+        persistFailRef.current = 0;
+      } catch {
+        persistFailRef.current += 1;
+        if (persistFailRef.current >= 3) {
+          toast.warning('Connection issue — cook progress may not be saving');
+          persistFailRef.current = 0;
+        }
+      }
     }, 700);
   }, []);
 
@@ -1443,7 +1492,8 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
   };
 
   const confirmComplete = async () => {
-    if (!cookSession) return;
+    if (!cookSession || completingRef.current) return;
+    completingRef.current = true;
     setCompleting(true);
     try {
       const pantryChanges = Object.entries(pendingStockChanges).map(([itemId, ch]) => ({
@@ -1489,6 +1539,7 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to complete');
     } finally {
+      completingRef.current = false;
       setCompleting(false);
     }
   };
@@ -2173,14 +2224,11 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
               <label className="text-xs font-medium text-muted-foreground">Images</label>
               <div className="flex flex-wrap gap-2">
                 {shopModal.files.map((file, idx) => (
-                  <div key={idx} className="relative group">
-                    <img src={URL.createObjectURL(file)} alt="" className="h-16 w-16 rounded-lg object-cover border" />
-                    <button type="button"
-                      onClick={() => setShopModal((m) => m ? { ...m, files: m.files.filter((_, i) => i !== idx) } : m)}
-                      className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <X className="h-2.5 w-2.5" />
-                    </button>
-                  </div>
+                  <FilePreview
+                    key={idx}
+                    file={file}
+                    onRemove={() => setShopModal((m) => m ? { ...m, files: m.files.filter((_, i) => i !== idx) } : m)}
+                  />
                 ))}
                 <button type="button"
                   onClick={() => shopImgRef.current?.click()}
@@ -2225,6 +2273,7 @@ function CategoryPanel({ open, onClose, categories }: {
   const queryClient = useQueryClient();
   const [newName, setNewName] = useState('');
   const [deleteFlow, setDeleteFlow] = useState<DeleteFlow | null>(null);
+  const deletingRef = useRef(false);
 
   useEffect(() => { if (!open) { setNewName(''); setDeleteFlow(null); } }, [open]);
 
@@ -2242,16 +2291,22 @@ function CategoryPanel({ open, onClose, categories }: {
     mutationFn: async ({ catId, targetCategoryId, newCategoryName }: {
       catId: string; targetCategoryId: string; newCategoryName: string;
     }) => {
-      let finalTargetId = targetCategoryId;
-      if (targetCategoryId === '__new__') {
-        const created = await api.post<Category>('/api/recipe-book/categories', { name: newCategoryName.trim() });
-        finalTargetId = created.id;
+      if (deletingRef.current) return;
+      deletingRef.current = true;
+      try {
+        let finalTargetId = targetCategoryId;
+        if (targetCategoryId === '__new__') {
+          const created = await api.post<Category>('/api/recipe-book/categories', { name: newCategoryName.trim() });
+          finalTargetId = created.id;
+        }
+        const recipesInCat = await api.get<RecipeSummary[]>(`/api/recipe-book/recipes?categoryId=${encodeURIComponent(catId)}`);
+        for (const r of recipesInCat) {
+          await api.patch(`/api/recipe-book/recipes/${r.id}`, { categoryId: finalTargetId });
+        }
+        await api.delete(`/api/recipe-book/categories/${catId}`);
+      } finally {
+        deletingRef.current = false;
       }
-      const recipesInCat = await api.get<RecipeSummary[]>(`/api/recipe-book/recipes?categoryId=${catId}`);
-      for (const r of recipesInCat) {
-        await api.patch(`/api/recipe-book/recipes/${r.id}`, { categoryId: finalTargetId });
-      }
-      await api.delete(`/api/recipe-book/categories/${catId}`);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.recipeBook.categories() });
@@ -2855,6 +2910,7 @@ function RecipesPage() {
     queryKey: ['cook-sessions', 'household-in-progress'],
     queryFn: () => api.get<InProgressSession[]>('/api/cook-sessions/household-in-progress'),
     refetchInterval: 30000,
+    refetchIntervalInBackground: false,
   });
 
   const canMakeIds = canMake
@@ -2887,7 +2943,7 @@ function RecipesPage() {
       setSelectedRecipeId(openRecipeId);
       void navigate({ to: '/recipes', search: {}, replace: true });
     }
-  }, [openRecipeId]);
+  }, [openRecipeId, navigate]);
 
   const handleSearch = (val: string) => {
     setSearch(val);

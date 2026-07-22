@@ -250,6 +250,24 @@ function ProfilePage() {
     });
   }, []);
 
+  // Prune stale notification IDs that are no longer in the active list
+  useEffect(() => {
+    const activeIds = new Set([
+      ...(householdPending?.invites ?? []).map((i) => i.id),
+      ...(householdPending?.requests ?? []).map((r) => r.id),
+      ...(sharesReceived ?? []).map((s) => s.id),
+    ]);
+    if (activeIds.size === 0) return;
+    setSeenNotifIds((prev) => {
+      const pruned = new Set([...prev].filter((id) => activeIds.has(id)));
+      if (pruned.size < prev.size) {
+        sessionStorage.setItem('seenNotifIds', JSON.stringify([...pruned]));
+        return pruned;
+      }
+      return prev;
+    });
+  }, [householdPending, sharesReceived]);
+
   const notifCount =
     ((householdPending?.invites ?? []).filter((i) => !seenNotifIds.has(i.id)).length +
      (householdPending?.requests ?? []).filter((r) => !seenNotifIds.has(r.id)).length) +
@@ -374,19 +392,19 @@ function SettingsTab({ me, household }: {
 
   const deleteAccount = useMutation({
     mutationFn: () => api.post('/api/auth/delete-user', {}),
-    onSuccess: () => { localStorage.removeItem('householdSkipped'); window.location.href = '/sign-in'; },
+    onSuccess: () => { sessionStorage.removeItem('householdSkipped'); window.location.href = '/sign-in'; },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Delete Failed'),
   });
 
   const handleLogout = async () => {
-    localStorage.removeItem('householdSkipped');
+    sessionStorage.removeItem('householdSkipped');
     await authClient.signOut();
     window.location.href = '/sign-in';
   };
 
   const handleThemeChange = (next: 'light' | 'dark') => {
     setTheme(next);
-    void api.patch('/api/users/me', { theme: next });
+    updateProfile.mutate({ theme: next });
   };
 
   const handleVisibilityChange = (pub: boolean) => {
@@ -402,6 +420,9 @@ function SettingsTab({ me, household }: {
   const bioValue = profileForm.watch('bio') ?? '';
 
   const onProfileSubmit = (v: z.infer<typeof profileSchema>) => {
+    if (v.handle === '' && me.handle) {
+      toast.warning('Handle not updated — enter a new handle (min 2 characters) or leave the field as-is');
+    }
     updateProfile.mutate({
       firstName: v.firstName,
       lastName: v.lastName,
@@ -758,7 +779,7 @@ function PinnedRecipesSection({ household }: {
         {slots.map((slot, idx) => {
           const pos = idx + 1;
           return slot ? (
-            <FilledPinSlot key={idx} slot={slot} position={pos}
+            <FilledPinSlot key={pos} slot={slot} position={pos}
               onReplace={() => openSelect(pos)}
               onRemove={() => handleRemove(pos)}
               onMoveUp={() => handleMove(pos, 'up')}
@@ -769,7 +790,7 @@ function PinnedRecipesSection({ household }: {
               disabled={busy}
             />
           ) : (
-            <EmptyPinSlot key={idx} position={pos} onSelect={() => openSelect(pos)} />
+            <EmptyPinSlot key={pos} position={pos} onSelect={() => openSelect(pos)} />
           );
         })}
       </div>
@@ -861,6 +882,7 @@ function roundQty(n: number): string {
 
 function scaleQty(qty: string | null, base: number, target: number): string | null {
   if (!qty) return null;
+  if (!base || base <= 0) return qty;
   const n = parseFloat(qty);
   if (isNaN(n)) return qty;
   return roundQty((n * target) / base);
@@ -1211,7 +1233,7 @@ function HouseholdTab({ household, meId }: {
           <Home className="h-5 w-5 text-muted-foreground" />
         </div>
         <p className="text-sm text-muted-foreground">You're not in a household yet.</p>
-        <Button size="sm" onClick={() => { localStorage.removeItem('householdSkipped'); window.location.href = '/onboarding'; }}>
+        <Button size="sm" onClick={() => { sessionStorage.removeItem('householdSkipped'); window.location.href = '/onboarding'; }}>
           Set Up A Household
         </Button>
       </div>
@@ -1493,12 +1515,12 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
   });
 
   const submitReview = useMutation({
-    mutationFn: () =>
+    mutationFn: ({ shareId }: { shareId: string }) =>
       myReview
-        ? api.patch(`/api/shares/${myShare!.id}/review`, { rating: reviewRating, comment: reviewComment || null })
-        : api.post(`/api/shares/${myShare!.id}/review`, { rating: reviewRating, comment: reviewComment || null }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.shares.review(myShare!.id) });
+        ? api.patch(`/api/shares/${shareId}/review`, { rating: reviewRating, comment: reviewComment || null })
+        : api.post(`/api/shares/${shareId}/review`, { rating: reviewRating, comment: reviewComment || null }),
+    onSuccess: (_data, { shareId }) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.shares.review(shareId) });
       toast.success(myReview ? 'Review Updated' : 'Review Submitted');
       setShowReviewForm(false);
     },
@@ -1649,7 +1671,7 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
                       />
                       <div className="flex gap-2">
                         <Button variant="outline" size="sm" className="flex-1 h-8" onClick={() => setShowReviewForm(false)}>Cancel</Button>
-                        <Button size="sm" className="flex-1 h-8" disabled={reviewRating === 0 || submitReview.isPending} onClick={() => submitReview.mutate()}>
+                        <Button size="sm" className="flex-1 h-8" disabled={reviewRating === 0 || submitReview.isPending} onClick={() => myShare && submitReview.mutate({ shareId: myShare.id })}>
                           {submitReview.isPending ? 'Saving…' : myReview ? 'Update' : 'Submit'}
                         </Button>
                       </div>
@@ -2074,7 +2096,7 @@ function HouseholdNotifications({ household, seenNotifIds, onMarkSeen }: {
   const acceptMutation = useMutation({
     mutationFn: (id: string) => api.post(`/api/households/join-requests/${id}/accept`),
     onSuccess: () => {
-      if (!household) { localStorage.removeItem('householdSkipped'); window.location.href = '/'; }
+      if (!household) { sessionStorage.removeItem('householdSkipped'); window.location.href = '/'; }
       else {
         void queryClient.invalidateQueries({ queryKey: queryKeys.household.pending() });
         toast.success('Request Accepted');
@@ -2245,7 +2267,7 @@ function ShareRecipeViewModal({ share, open, onClose, onCopy }: {
   const [system, setSystem] = useMeasureSystem();
 
   const { data: detail, isLoading: detailLoading } = useQuery({
-    queryKey: ['share-recipe-detail', share?.copiedRecipeId],
+    queryKey: share?.copiedRecipeId ? queryKeys.recipeBook.recipe(share.copiedRecipeId) : ['share-recipe-detail-none'],
     queryFn: () => api.get<RecipeDetail>(`/api/recipe-book/recipes/${share!.copiedRecipeId}`),
     enabled: open && !!share?.copiedRecipeId,
   });
@@ -2773,7 +2795,7 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
                 <PaginatedItems
                   items={pastSent}
                   renderItem={(s) => (
-                    <div key={s.id} className="rounded-2xl border bg-card overflow-hidden flex flex-col cursor-pointer" onClick={() => setViewShare(s as unknown as ShareItem)}>
+                    <div key={s.id} className="rounded-2xl border bg-card overflow-hidden flex flex-col cursor-pointer" onClick={() => setViewShare({ ...s, fromUserId: s.toUserId, fromUserName: s.toUserName, fromUserHandle: s.toUserHandle, fromUserImage: s.toUserImage } as ShareItem)}>
                       <div className="flex items-center gap-3 px-3 pt-3 pb-2">
                         <Avatar className="h-9 w-9 shrink-0 ring-2 ring-border">
                           <AvatarImage src={s.toUserImage ?? undefined} />
@@ -2794,7 +2816,7 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
                             <p className="text-sm font-semibold truncate">{s.recipeTitle ?? 'Untitled'}</p>
                             {s.recipeDescription && <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{s.recipeDescription}</p>}
                           </div>
-                          <button type="button" onClick={(e) => { e.stopPropagation(); setViewShare(s as unknown as ShareItem); }}
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setViewShare({ ...s, fromUserId: s.toUserId, fromUserName: s.toUserName, fromUserHandle: s.toUserHandle, fromUserImage: s.toUserImage } as ShareItem); }}
                             className="flex items-center gap-1 text-[11px] font-medium rounded-full border border-border/60 px-2.5 py-1 hover:bg-accent transition-colors text-muted-foreground hover:text-foreground shrink-0">
                             <BookOpen className="h-3 w-3" />View
                           </button>

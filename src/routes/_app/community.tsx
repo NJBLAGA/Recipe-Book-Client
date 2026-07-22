@@ -147,6 +147,7 @@ function convertStepText(step: string, system: MeasureSystem): string {
 
 function scaleQty(qty: string | null, base: number, target: number): string | null {
   if (!qty) return null;
+  if (!base || base <= 0) return qty;
   const n = parseFloat(qty);
   if (isNaN(n)) return qty;
   return round((n * target) / base);
@@ -360,7 +361,7 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
-  const reviewCommentRef = useRef<HTMLTextAreaElement | undefined>(undefined);
+  const reviewCommentRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: detail, isLoading: detailLoading } = useQuery({
     queryKey: queryKeys.users.pinRecipe(target?.ownerHandle ?? '', target?.recipeId ?? ''),
@@ -391,11 +392,7 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
     mutationFn: () => api.post('/api/shares/request', { recipeId: target!.recipeId, ownerId: target!.ownerId }),
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: queryKeys.shares.sent() }); toast.success('Recipe Requested'); },
     onError: (err) => {
-      if (err instanceof ApiError && (err as any).sameHousehold) {
-        toast.info('This person is in your household — you already share access to their recipes.');
-      } else {
-        toast.error(err instanceof ApiError ? err.message : 'Request Failed');
-      }
+      toast.error(err instanceof ApiError ? err.message : 'Request Failed');
     },
   });
 
@@ -558,7 +555,7 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
                       <HalfStarPicker value={reviewRating} onChange={setReviewRating} />
                       <div className="relative">
                         <textarea
-                          ref={(el) => { reviewCommentRef.current = el ?? undefined; }}
+                          ref={(el) => { reviewCommentRef.current = el; }}
                           placeholder="Share your thoughts…"
                           className="w-full resize-none overflow-hidden text-sm min-h-[72px] pb-5 rounded-md border bg-background px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring"
                           value={reviewComment}
@@ -924,11 +921,7 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
     mutationFn: () => api.post('/api/shares/request', { recipeId: post!.recipeId!, ownerId: post!.userId }),
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: queryKeys.shares.sent() }); toast.success('Recipe Requested'); },
     onError: (err) => {
-      if (err instanceof ApiError && (err as any).sameHousehold) {
-        toast.info('This person is in your household — you already share access to their recipes.');
-      } else {
-        toast.error(err instanceof ApiError ? err.message : 'Request Failed');
-      }
+      toast.error(err instanceof ApiError ? err.message : 'Request Failed');
     },
   });
 

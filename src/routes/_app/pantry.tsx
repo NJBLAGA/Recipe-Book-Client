@@ -677,14 +677,11 @@ function ItemDetailModal({ item, open, onClose, onEdit }: {
               <label className="text-xs font-medium text-muted-foreground">Images</label>
               <div className="flex flex-wrap gap-2">
                 {shopModal.files.map((file, idx) => (
-                  <div key={idx} className="relative group">
-                    <img src={URL.createObjectURL(file)} alt="" className="h-16 w-16 rounded-lg object-cover border" />
-                    <button type="button"
-                      onClick={() => setShopModal((m) => m ? { ...m, files: m.files.filter((_, i) => i !== idx) } : m)}
-                      className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-foreground/80 text-background flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <X className="h-2.5 w-2.5" />
-                    </button>
-                  </div>
+                  <FilePreview
+                    key={idx}
+                    file={file}
+                    onRemove={() => setShopModal((m) => m ? { ...m, files: m.files.filter((_, i) => i !== idx) } : m)}
+                  />
                 ))}
                 <button type="button"
                   onClick={() => shopImgRef.current?.click()}
@@ -920,6 +917,26 @@ function IngredientSearchPanel({ open, onClose, pantryItems, onOpenRecipe }: {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── File Preview (revokes blob URL on unmount) ───────────────────────────────
+
+function FilePreview({ file, onRemove }: { file: File; onRemove: () => void }) {
+  const [src, setSrc] = useState('');
+  useEffect(() => {
+    const url = URL.createObjectURL(file);
+    setSrc(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+  return (
+    <div className="relative group">
+      <img src={src} alt="" className="h-16 w-16 rounded-lg object-cover border" />
+      <button type="button" onClick={onRemove}
+        className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-foreground/80 text-background flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+        <X className="h-2.5 w-2.5" />
+      </button>
     </div>
   );
 }

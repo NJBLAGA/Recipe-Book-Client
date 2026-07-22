@@ -8,8 +8,12 @@ interface SourceDisplayProps {
 
 export function SourceDisplay({ source, className }: SourceDisplayProps) {
   if (!source) return null;
-  const isUrl = source.startsWith('http://') || source.startsWith('https://');
+  const isUrl = source.startsWith('https://');
   if (isUrl) {
+    let displayHost = source;
+    try {
+      displayHost = new URL(source).hostname.replace(/^www\./, '');
+    } catch {}
     return (
       <a
         href={source}
@@ -19,7 +23,7 @@ export function SourceDisplay({ source, className }: SourceDisplayProps) {
         onClick={(e) => e.stopPropagation()}
       >
         <ExternalLink className="h-3 w-3" />
-        URL
+        {displayHost}
       </a>
     );
   }
@@ -36,7 +40,7 @@ export function RecipeMetaLine({ categoryName, source, className }: RecipeMetaLi
   const hasCategory = !!categoryName;
   const hasSource = !!source;
   if (!hasCategory && !hasSource) return null;
-  const isUrl = hasSource && (source!.startsWith('http://') || source!.startsWith('https://'));
+  const isUrl = hasSource && source!.startsWith('https://');
   return (
     <div className={cn('space-y-1', className)}>
       {hasCategory && (
@@ -48,17 +52,21 @@ export function RecipeMetaLine({ categoryName, source, className }: RecipeMetaLi
         <p className="text-xs text-muted-foreground">
           <span className="font-medium text-foreground/70">Source/Author:</span>{' '}
           {isUrl
-            ? (
-              <a
-                href={source!}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline font-medium inline-flex items-center gap-0.5"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <ExternalLink className="h-3 w-3" />URL
-              </a>
-            )
+            ? (() => {
+                let displayHost = source!;
+                try { displayHost = new URL(source!).hostname.replace(/^www\./, ''); } catch {}
+                return (
+                  <a
+                    href={source!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline font-medium inline-flex items-center gap-0.5"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ExternalLink className="h-3 w-3" />{displayHost}
+                  </a>
+                );
+              })()
             : source
           }
         </p>
