@@ -8,7 +8,7 @@ import {
   Link2, UtensilsCrossed, ShoppingCart, AlertCircle, History,
   Check, ChefHat, ChevronDown, ChevronUp, Loader2, SlidersHorizontal,
   FileText, Tag, ArrowRight, ImagePlus, Maximize2, Square, CheckSquare,
-  CheckCircle2, XCircle, Clock, Eye,
+  CheckCircle2, XCircle, Clock, Eye, FileDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -1465,13 +1465,55 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
     }
   };
 
+  const { state: timerState, setTimerOpen } = useTimerContext();
+  const [pdfLoading, setPdfLoading] = useState(false);
+
   if (!open) return null;
 
   const base = recipe?.baseServings ?? 1;
   const effective = servings ?? base;
   const images = recipe?.images ? [...recipe.images].sort((a, b) => a.sortOrder - b.sortOrder) : [];
   const isCooking = !!cookSession;
-  const { state: timerState, setTimerOpen } = useTimerContext();
+
+  async function handleDownloadPdf() {
+    if (!recipe || pdfLoading) return;
+    setPdfLoading(true);
+    try {
+      const scaledIngredients = recipe.ingredients.map((ing) => {
+        const scaledQty = scaleQty(ing.quantity, base, effective);
+        const { qty, unit } = convertQty(scaledQty, ing.unit, system);
+        return { name: ing.name, quantity: qty || null, unit: unit || null, note: ing.note };
+      });
+      const convertedSteps = recipe.steps.map((step) => ({
+        text: convertStepText(step.text, system),
+        subSteps: step.subSteps.map((sub) => convertStepText(sub, system)),
+      }));
+      const [{ pdf }, { RecipePdf }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('@/components/RecipePdf'),
+      ]);
+      const blob = await pdf(
+        <RecipePdf
+          title={recipe.title}
+          categoryName={recipe.categoryName}
+          description={recipe.description}
+          servings={effective}
+          ingredients={scaledIngredients}
+          steps={convertedSteps}
+        />
+      ).toBlob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${recipe.title.replace(/[^a-z0-9]/gi, '_')}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Failed to generate PDF');
+    } finally {
+      setPdfLoading(false);
+    }
+  }
 
   function fmtMs(ms: number) {
     const total = Math.max(0, Math.ceil(ms / 1000));
@@ -1534,6 +1576,13 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
               <h2 className="flex-1 font-bold text-xl leading-tight">{recipe.title}</h2>
               {!isCooking && (
                 <div className="flex gap-1.5 shrink-0">
+                  <button type="button" onClick={() => void handleDownloadPdf()} disabled={pdfLoading}
+                    title="Download as PDF"
+                    className="flex h-8 w-8 items-center justify-center rounded-full border hover:bg-accent transition-colors disabled:opacity-40">
+                    {pdfLoading
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <FileDown className="h-3.5 w-3.5" />}
+                  </button>
                   <button type="button" onClick={() => onEdit(recipe)}
                     className="flex h-8 w-8 items-center justify-center rounded-full border hover:bg-accent transition-colors">
                     <Pencil className="h-3.5 w-3.5" />
