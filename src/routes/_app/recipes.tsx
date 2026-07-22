@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
 import { api, ApiError } from '@/lib/api';
@@ -23,6 +24,7 @@ import { queryKeys } from '@/lib/queryKeys';
 import { useMeasureSystem } from '@/hooks/useMeasureSystem';
 import type { MeasureSystem } from '@/hooks/useMeasureSystem';
 import { useTimerContext } from '@/contexts/TimerContext';
+import { RecipeMetaLine } from '@/components/SourceDisplay';
 
 export const Route = createFileRoute('/_app/recipes')({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -36,7 +38,7 @@ export const Route = createFileRoute('/_app/recipes')({
 interface Category { id: string; name: string; recipeBookId: string; }
 
 interface RecipeSummary {
-  id: string; title: string; description: string | null; baseServings: number;
+  id: string; title: string; description: string | null; source: string | null; baseServings: number;
   categoryId: string | null; categoryName: string | null;
   images: string[]; createdAt: string; updatedAt: string;
 }
@@ -52,7 +54,7 @@ interface RecipeStep { text: string; subSteps: string[]; }
 
 interface RecipeDetail extends Omit<RecipeSummary, 'images'> {
   steps: RecipeStep[]; sharedByUserId: string | null; originalRecipeId: string | null;
-  ingredients: Ingredient[]; images: RecipeImage[];
+  ingredients: Ingredient[]; images: RecipeImage[]; source: string | null;
 }
 
 interface CookHistoryEntry {
@@ -314,6 +316,7 @@ function CookingAnimation({ message = 'Scanning your recipe…' }: { message?: s
 interface RecipeFormState {
   title: string;
   description: string;
+  source: string;
   baseServings: string;
   categoryId: string;
   steps: RecipeStep[];
@@ -352,6 +355,7 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
   const [form, setForm] = useState<RecipeFormState>(() => ({
     title: initial?.title ?? '',
     description: initial?.description ?? '',
+    source: initial?.source ?? '',
     baseServings: initial?.baseServings ?? '4',
     categoryId: initial?.categoryId ?? '',
     steps: initial?.steps?.length ? initial.steps : [emptyStep()],
@@ -363,6 +367,7 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
       setForm({
         title: initial?.title ?? '',
         description: initial?.description ?? '',
+        source: initial?.source ?? '',
         baseServings: initial?.baseServings ?? '4',
         categoryId: initial?.categoryId ?? '',
         steps: initial?.steps?.length ? initial.steps : [emptyStep()],
@@ -430,6 +435,7 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
         ...prev,
         title: data.title || prev.title,
         description: data.description ?? prev.description,
+        source: prev.source || url,
         baseServings: String(data.baseServings),
         steps: data.steps.length ? data.steps.map((s) => ({ text: s, subSteps: [] })) : prev.steps,
         ingredients: data.ingredients.length ? extractedToRows(data.ingredients) : prev.ingredients,
@@ -517,6 +523,7 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
       const servings = parseInt(form.baseServings);
       if (isNaN(servings) || servings < 1) throw new Error('Servings must be a positive number');
       if (!form.title.trim()) throw new Error('Title is required');
+      if (!form.source.trim()) throw new Error('Source is required');
       const ingredients = form.ingredients
         .filter((r) => r.name.trim())
         .map((r, i) => ({
@@ -535,6 +542,7 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
       const body = {
         title: form.title.trim(),
         description: form.description.trim() || undefined,
+        source: form.source.trim(),
         baseServings: servings,
         categoryId: form.categoryId,
         steps,
@@ -734,7 +742,7 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
               <p className="text-center">
                 <button type="button"
                   onClick={() => { setMode('paste'); setPastePhase('input'); setPasteText(''); }}
-                  className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors">
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground shadow-sm hover:bg-accent transition-colors">
                   Paste text instead
                 </button>
               </p>
@@ -788,7 +796,7 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
               <p className="text-center">
                 <button type="button"
                   onClick={() => { setMode('paste'); setPastePhase('input'); setPasteText(''); }}
-                  className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors">
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground shadow-sm hover:bg-accent transition-colors">
                   Paste text instead
                 </button>
               </p>
@@ -896,6 +904,15 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
                         onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} />
                     </div>
 
+                    {/* Source */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Source *</label>
+                      <Input className="h-9"
+                        placeholder={mode === 'url' ? 'Pre-filled from URL' : 'e.g. Ottolenghi Simple, page 42 or https://…'}
+                        value={form.source}
+                        onChange={(e) => setForm((p) => ({ ...p, source: e.target.value }))} />
+                    </div>
+
                     {/* Description */}
                     <div className="space-y-1.5">
                       <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Description</label>
@@ -908,21 +925,32 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
                         <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Category *</label>
-                        <select
-                          className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                        <Select
                           value={form.categoryId}
-                          onChange={(e) => {
-                            if (e.target.value === '__create__') {
+                          onValueChange={(val) => {
+                            if (val === '__create__') {
                               setNewCatName('');
                               setCreateCatOpen(true);
                             } else {
-                              setForm((p) => ({ ...p, categoryId: e.target.value }));
+                              setForm((p) => ({ ...p, categoryId: val }));
                             }
                           }}>
-                          <option value="" disabled>Select a category…</option>
-                          {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                          <option value="__create__">+ Create new category…</option>
-                        </select>
+                          <SelectTrigger className="h-9 text-sm">
+                            <SelectValue placeholder="Select a category…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {categories.map((c) => (
+                              <SelectItem key={c.id} value={c.id}
+                                className="focus:bg-primary/10 focus:text-primary">
+                                {c.name}
+                              </SelectItem>
+                            ))}
+                            <SelectItem value="__create__"
+                              className="focus:bg-primary/10 focus:text-primary font-medium text-primary">
+                              + Create new category…
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Servings *</label>
@@ -1497,6 +1525,7 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
           title={recipe.title}
           categoryName={recipe.categoryName}
           description={recipe.description}
+          source={recipe.source}
           servings={effective}
           ingredients={scaledIngredients}
           steps={convertedSteps}
@@ -1571,7 +1600,7 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
 
         {/* ── Title + edit/delete — outside scroll so the Slider can't push it off ── */}
         {!isLoading && recipe && (
-          <div className="shrink-0 px-4 pt-4 pb-3 border-b">
+          <div className="shrink-0 px-4 pt-4 pb-3 border-b space-y-2.5">
             <div className="flex items-start gap-2">
               <h2 className="flex-1 font-bold text-xl leading-tight">{recipe.title}</h2>
               {!isCooking && (
@@ -1623,12 +1652,10 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
                 </button>
               )}
             </div>
-            {recipe.categoryName && (
-              <Badge variant="secondary" className="mt-1.5 text-[10px]">{recipe.categoryName}</Badge>
-            )}
             {recipe.description && (
-              <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{recipe.description}</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">{recipe.description}</p>
             )}
+            <RecipeMetaLine categoryName={recipe.categoryName} source={recipe.source} />
           </div>
         )}
 
@@ -2885,6 +2912,7 @@ function RecipesPage() {
     ? {
         title: editRecipe.title,
         description: editRecipe.description ?? '',
+        source: editRecipe.source ?? '',
         baseServings: String(editRecipe.baseServings),
         categoryId: editRecipe.categoryId ?? '',
         steps: editRecipe.steps,

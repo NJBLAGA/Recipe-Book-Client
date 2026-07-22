@@ -22,6 +22,7 @@ import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
+import { SourceDisplay, RecipeMetaLine } from '@/components/SourceDisplay';
 
 export const Route = createFileRoute('/_app/community')({
   component: CommunityPage,
@@ -45,6 +46,7 @@ interface CommunityPost {
   id: string; comment: string; createdAt: string;
   userId: string; userName: string | null; userHandle: string | null; userImage: string | null;
   recipeId: string | null; recipeTitle: string | null; recipeDescription: string | null;
+  recipeSource: string | null;
   recipeImages: string[]; isFollowing: boolean; isOwnPost: boolean;
   reviewCount: number; recipeAvgRating: number | null; sameHousehold: boolean;
 }
@@ -64,7 +66,7 @@ interface RecipeStep {
 }
 
 interface RecipeDetail {
-  id: string; title: string; description: string | null;
+  id: string; title: string; description: string | null; source: string | null;
   baseServings: number; steps: RecipeStep[]; categoryName: string | null;
   ingredients: RecipeIngredient[];
   images: { url: string; sortOrder: number }[];
@@ -78,7 +80,7 @@ interface RecipeReview {
 
 interface ProfilePin {
   position: number; recipeId: string | null; recipeTitle: string | null;
-  recipeDescription: string | null; recipeImage: string | null;
+  recipeDescription: string | null; recipeSource: string | null; recipeImage: string | null;
   recipeRating: { avg: number; count: number } | null;
 }
 
@@ -290,13 +292,14 @@ function UserProfileModal({ target, meId, open, onClose }: {
                       <div className="min-w-0 flex-1 space-y-0.5">
                         <p className="text-sm font-semibold truncate">{pin.recipeTitle}</p>
                         {pin.recipeDescription && <p className="text-xs text-muted-foreground line-clamp-1">{pin.recipeDescription}</p>}
+                        <SourceDisplay source={pin.recipeSource} />
                         {pin.recipeRating && pin.recipeRating.count > 0 && <StarDisplay rating={pin.recipeRating.avg} count={pin.recipeRating.count} />}
                       </div>
                       {pin.recipeId && target.handle && (
                         <div className="flex items-center gap-1.5 shrink-0">
                           <button type="button"
                             className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
-                            onClick={() => setPinViewTarget({ recipeId: pin.recipeId!, recipeTitle: pin.recipeTitle, recipeDescription: pin.recipeDescription, recipeImage: pin.recipeImage, ownerHandle: target.handle!, ownerId: target.userId, sameHousehold: isHousehold })}>
+                            onClick={() => setPinViewTarget({ recipeId: pin.recipeId!, recipeTitle: pin.recipeTitle, recipeDescription: pin.recipeDescription, recipeSource: pin.recipeSource, recipeImage: pin.recipeImage, ownerHandle: target.handle!, ownerId: target.userId, sameHousehold: isHousehold })}>
                             <Eye className="h-3.5 w-3.5" />
                           </button>
                           {!isCurrentUser && !isHousehold && (
@@ -342,7 +345,7 @@ function UserProfileModal({ target, meId, open, onClose }: {
 
 interface PinViewTarget {
   recipeId: string; recipeTitle: string | null; recipeDescription: string | null;
-  recipeImage: string | null; ownerHandle: string; ownerId: string;
+  recipeSource: string | null; recipeImage: string | null; ownerHandle: string; ownerId: string;
   sameHousehold: boolean;
 }
 
@@ -477,7 +480,6 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-bold leading-tight">{detail.title}</h2>
-                {detail.categoryName && <p className="text-xs text-muted-foreground mt-0.5">{detail.categoryName}</p>}
               </div>
               <div className="flex items-center rounded-full border p-0.5 bg-muted/30 shrink-0">
                 <button type="button" onClick={() => setSystem('metric')}
@@ -493,6 +495,7 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
               </div>
             </div>
             {detail.description && <p className="text-sm text-foreground/80 leading-relaxed">{detail.description}</p>}
+            <RecipeMetaLine categoryName={detail.categoryName} source={detail.source} />
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
@@ -981,7 +984,6 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-bold leading-tight">{recipe.title}</h2>
-                {recipe.categoryName && <p className="text-xs text-muted-foreground mt-0.5">{recipe.categoryName}</p>}
               </div>
               <div className="flex items-center rounded-full border p-0.5 bg-muted/30 shrink-0">
                 <button type="button" onClick={() => setSystem('metric')}
@@ -998,6 +1000,7 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
             </div>
             {avgRating !== null && <StarDisplay rating={avgRating} count={reviews.length} />}
             {recipe.description && <p className="text-sm text-foreground/80 leading-relaxed">{recipe.description}</p>}
+            <RecipeMetaLine categoryName={recipe.categoryName} source={recipe.source} />
             {/* Serving slider */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
@@ -1287,7 +1290,6 @@ function CreatePostModal({ open, onClose }: { open: boolean; onClose: () => void
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <h2 className="text-base font-bold leading-tight">{previewDetail?.title ?? previewRecipe.title}</h2>
-                  {previewDetail?.categoryName && <p className="text-xs text-muted-foreground mt-0.5">{previewDetail.categoryName}</p>}
                 </div>
                 <div className="flex items-center rounded-full border p-0.5 bg-muted/30 shrink-0">
                   <button type="button" onClick={() => setPreviewSystem('metric')}
@@ -1305,6 +1307,7 @@ function CreatePostModal({ open, onClose }: { open: boolean; onClose: () => void
               {(previewDetail?.description ?? previewRecipe.description) && (
                 <p className="text-sm text-foreground/80 leading-relaxed">{previewDetail?.description ?? previewRecipe.description}</p>
               )}
+              <RecipeMetaLine categoryName={previewDetail?.categoryName} source={previewDetail?.source} />
               {previewLoading && <div className="flex justify-center py-6"><div className="h-5 w-5 animate-spin rounded-full border-2 border-primary/30 border-t-transparent" /></div>}
               {previewDetail && (
                 <>
@@ -1922,6 +1925,7 @@ function PostCard({ post, meId, onFollow, onUnfollow, onDelete, onViewRecipe, on
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold truncate">{post.recipeTitle}</p>
               {post.recipeDescription && <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{post.recipeDescription}</p>}
+              <SourceDisplay source={post.recipeSource} className="mt-0.5" />
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
               <button type="button" onClick={onViewRecipe}

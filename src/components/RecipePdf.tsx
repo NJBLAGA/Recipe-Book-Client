@@ -16,6 +16,7 @@ interface RecipePdfProps {
   title: string;
   categoryName: string | null;
   description: string | null;
+  source: string | null;
   servings: number;
   ingredients: Ingredient[];
   steps: RecipeStep[];
@@ -45,6 +46,11 @@ const s = StyleSheet.create({
     marginBottom: 4,
   },
   categoryTag: {
+    fontSize: 9,
+    color: '#888888',
+    marginBottom: 4,
+  },
+  sourceTag: {
     fontSize: 9,
     color: '#888888',
     marginBottom: 16,
@@ -153,6 +159,7 @@ export function RecipePdf({
   title,
   categoryName,
   description,
+  source,
   servings,
   ingredients,
   steps,
@@ -165,6 +172,7 @@ export function RecipePdf({
         <Text style={s.title}>{title}</Text>
         <Text style={s.servingsTag}>Serves {servings}</Text>
         {categoryName ? <Text style={s.categoryTag}>{categoryName}</Text> : null}
+        {source ? <Text style={s.sourceTag}>Source: {source}</Text> : null}
 
         <View style={s.divider} />
 

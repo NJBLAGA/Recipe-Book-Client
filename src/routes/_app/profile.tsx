@@ -38,6 +38,7 @@ import {
 import { Slider } from '@/components/ui/slider';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { cn } from '@/lib/utils';
+import { RecipeMetaLine } from '@/components/SourceDisplay';
 
 export const Route = createFileRoute('/_app/profile')({
   component: ProfilePage,
@@ -52,19 +53,19 @@ interface Member {
 
 interface Pin {
   position: number; recipeId: string | null; recipeTitle: string | null;
-  recipeDescription: string | null; recipeImage: string | null;
+  recipeDescription: string | null; recipeSource: string | null; recipeImage: string | null;
   recipeRating: { avg: number; count: number } | null;
 }
 
 interface OwnPin {
   position: number; recipeId: string | null;
   recipeTitle: string | null; recipeDescription: string | null;
-  recipeImage: string | null;
+  recipeSource: string | null; recipeImage: string | null;
 }
 
 type PinSlot = {
   recipeId: string; recipeTitle: string;
-  recipeDescription: string | null; recipeImage: string | null;
+  recipeDescription: string | null; recipeSource: string | null; recipeImage: string | null;
 } | null;
 
 interface RecipeItem {
@@ -88,9 +89,11 @@ interface RecipeIngredient {
   note: string | null; sortOrder: number;
 }
 
+interface RecipeStep { text: string; subSteps: string[]; }
+
 interface RecipeDetail {
-  id: string; title: string; description: string | null;
-  baseServings: number; steps: string[]; categoryName: string | null;
+  id: string; title: string; description: string | null; source: string | null;
+  baseServings: number; steps: RecipeStep[]; categoryName: string | null;
   ingredients: RecipeIngredient[];
   images: { url: string; sortOrder: number }[];
 }
@@ -109,7 +112,7 @@ interface PendingSentResponse {
 
 interface ShareItem {
   id: string; recipeId: string | null; recipeTitle: string | null;
-  recipeDescription: string | null; recipeImage: string | null;
+  recipeDescription: string | null; recipeSource: string | null; recipeImage: string | null;
   fromUserId: string; fromUserName: string | null; fromUserHandle: string | null; fromUserImage: string | null;
   status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'REQUESTED';
   copiedRecipeId: string | null; createdAt: string; updatedAt: string;
@@ -117,7 +120,7 @@ interface ShareItem {
 
 interface SentShareItem {
   id: string; recipeId: string | null; recipeTitle: string | null;
-  recipeDescription: string | null; recipeImage: string | null;
+  recipeDescription: string | null; recipeSource: string | null; recipeImage: string | null;
   toUserId: string; toUserName: string | null; toUserHandle: string | null; toUserImage: string | null;
   status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'REQUESTED';
   copiedRecipeId: string | null; createdAt: string;
@@ -677,6 +680,7 @@ function PinnedRecipesSection({ household }: {
           recipeId: pin.recipeId,
           recipeTitle: pin.recipeTitle ?? 'Untitled',
           recipeDescription: pin.recipeDescription,
+          recipeSource: pin.recipeSource,
           recipeImage: pin.recipeImage,
         };
       }
@@ -707,6 +711,7 @@ function PinnedRecipesSection({ household }: {
       recipeId: recipe.id,
       recipeTitle: recipe.title,
       recipeDescription: recipe.description,
+      recipeSource: null,
       recipeImage: recipe.image,
     };
     updatePins.mutate(next);
@@ -970,7 +975,6 @@ function PinViewModal({ slot, open, onClose }: { slot: PinSlot; open: boolean; o
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-bold leading-tight">{recipe.title}</h2>
-                {recipe.categoryName && <p className="text-xs text-muted-foreground mt-0.5">{recipe.categoryName}</p>}
               </div>
               <div className="flex items-center rounded-full border p-0.5 bg-muted/30 shrink-0">
                 <button type="button" onClick={() => setSystem('metric')}
@@ -986,6 +990,7 @@ function PinViewModal({ slot, open, onClose }: { slot: PinSlot; open: boolean; o
               </div>
             </div>
             {recipe.description && <p className="text-sm text-foreground/80 leading-relaxed">{recipe.description}</p>}
+            <RecipeMetaLine categoryName={recipe.categoryName} source={recipe.source} />
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
@@ -1038,7 +1043,19 @@ function PinViewModal({ slot, open, onClose }: { slot: PinSlot; open: boolean; o
                       <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-bold leading-none mt-0.5">
                         {i + 1}
                       </span>
-                      <p className="leading-relaxed flex-1">{convertStepText(step, system)}</p>
+                      <div className="leading-relaxed flex-1">
+                        <p>{convertStepText(step.text, system)}</p>
+                        {step.subSteps.length > 0 && (
+                          <ul className="mt-1.5 space-y-1 ml-2">
+                            {step.subSteps.map((sub, j) => (
+                              <li key={j} className="flex gap-1.5 text-sm text-foreground/75">
+                                <span className="shrink-0 mt-1 h-1 w-1 rounded-full bg-muted-foreground/60" />
+                                <span>{convertStepText(sub, system)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1542,7 +1559,6 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-bold leading-tight">{detail.title}</h2>
-                {detail.categoryName && <p className="text-xs text-muted-foreground mt-0.5">{detail.categoryName}</p>}
               </div>
               <div className="flex items-center rounded-full border p-0.5 bg-muted/30 shrink-0">
                 <button type="button" onClick={() => setSystem('metric')}
@@ -1558,6 +1574,7 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
               </div>
             </div>
             {detail.description && <p className="text-sm text-foreground/80 leading-relaxed">{detail.description}</p>}
+            <RecipeMetaLine categoryName={detail.categoryName} source={detail.source} />
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5"><ChefHat className="h-3.5 w-3.5" />Servings</span>
@@ -1599,7 +1616,19 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
                     {detail.steps.map((step, i) => (
                       <div key={i} className="flex gap-3 text-sm">
                         <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-bold leading-none mt-0.5">{i + 1}</span>
-                        <p className="leading-relaxed flex-1">{convertStepText(step, system)}</p>
+                        <div className="leading-relaxed flex-1">
+                          <p>{convertStepText(step.text, system)}</p>
+                          {step.subSteps.length > 0 && (
+                            <ul className="mt-1.5 space-y-1 ml-2">
+                              {step.subSteps.map((sub, j) => (
+                                <li key={j} className="flex gap-1.5 text-sm text-foreground/75">
+                                  <span className="shrink-0 mt-1 h-1 w-1 rounded-full bg-muted-foreground/60" />
+                                  <span>{convertStepText(sub, system)}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1856,7 +1885,7 @@ function MemberProfileDialog({ member, householdName, meId, open, onClose }: {
         .map((p) => ({
           position: p.position, recipeId: p.recipeId,
           recipeTitle: p.recipeTitle, recipeDescription: p.recipeDescription,
-          recipeImage: p.recipeImage, recipeRating: null,
+          recipeSource: p.recipeSource, recipeImage: p.recipeImage, recipeRating: null,
         }));
 
   const isLoading = member.handle ? profileLoading : pinsLoading;
@@ -1867,6 +1896,7 @@ function MemberProfileDialog({ member, householdName, meId, open, onClose }: {
       recipeId: pin.recipeId,
       recipeTitle: pin.recipeTitle ?? 'Untitled',
       recipeDescription: pin.recipeDescription,
+      recipeSource: pin.recipeSource,
       recipeImage: pin.recipeImage,
     });
   };
@@ -1968,6 +1998,7 @@ function PinCard({ pin, onView, onRequest, requesting }: {
         {pin.recipeDescription && (
           <p className="text-xs text-muted-foreground line-clamp-1 leading-relaxed">{pin.recipeDescription}</p>
         )}
+        <RecipeMetaLine source={pin.recipeSource} />
         <StarRating rating={pin.recipeRating} />
       </div>
       {(onView || onRequest) && (
@@ -2275,12 +2306,10 @@ function ShareRecipeViewModal({ share, open, onClose, onCopy }: {
               <h2 className="text-base font-bold leading-tight">{share.recipeTitle ?? 'Untitled Recipe'}</h2>
               {isInBook && <Badge variant="default" className="text-[10px] shrink-0">In Book</Badge>}
             </div>
-            {detail?.categoryName && (
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">{detail.categoryName}</p>
-            )}
             {share.recipeDescription && (
               <p className="text-sm text-foreground/75 leading-relaxed">{share.recipeDescription}</p>
             )}
+            <RecipeMetaLine categoryName={detail?.categoryName} source={share.recipeSource} />
           </div>
 
           <div className="flex items-center gap-2">
@@ -2358,7 +2387,19 @@ function ShareRecipeViewModal({ share, open, onClose, onCopy }: {
                     {detail.steps.map((step, i) => (
                       <li key={i} className="flex gap-3 text-sm">
                         <span className="shrink-0 flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-[10px] font-bold mt-0.5">{i + 1}</span>
-                        <span className="text-foreground/85 leading-relaxed">{convertStepText(step, system)}</span>
+                        <div className="text-foreground/85 leading-relaxed flex-1">
+                          <span>{convertStepText(step.text, system)}</span>
+                          {step.subSteps.length > 0 && (
+                            <ul className="mt-1.5 space-y-1 ml-2">
+                              {step.subSteps.map((sub, j) => (
+                                <li key={j} className="flex gap-1.5 text-sm text-foreground/75">
+                                  <span className="shrink-0 mt-1 h-1 w-1 rounded-full bg-muted-foreground/60" />
+                                  <span>{convertStepText(sub, system)}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
                       </li>
                     ))}
                   </ol>
@@ -2645,6 +2686,7 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-semibold truncate">{s.recipeTitle ?? 'Untitled'}</p>
                             {s.recipeDescription && <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{s.recipeDescription}</p>}
+                            <RecipeMetaLine source={s.recipeSource} className="mt-0.5" />
                           </div>
                           <button type="button" onClick={(e) => { e.stopPropagation(); setViewShare(s); }}
                             className="flex items-center gap-1 text-[11px] font-medium rounded-full border border-border/60 px-2.5 py-1 hover:bg-accent transition-colors text-muted-foreground hover:text-foreground shrink-0">
