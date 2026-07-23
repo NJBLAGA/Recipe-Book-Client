@@ -370,12 +370,7 @@ function SettingsTab({ me, household }: {
     mutationFn: async (file: File) => {
       const fd = new FormData();
       fd.append('image', file);
-      const res = await fetch('/api/users/me/picture', { method: 'POST', credentials: 'include', body: fd });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new ApiError(res.status, body.message ?? body.error ?? res.statusText);
-      }
-      return res.json() as Promise<{ id: string; image: string }>;
+      return api.postForm<{ id: string; image: string }>('/api/users/me/picture', fd);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.users.me() });
