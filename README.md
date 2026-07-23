@@ -117,14 +117,3 @@ Community tab
 
 **shadcn/ui ownership model.** Components live in `src/components/ui/`. Add a new one with `npx shadcn add <component>`. Every pixel is customisable with no upstream version to track.
 
----
-
-## Setup
-
-```bash
-npm install
-cp .env.example .env.local        # VITE_API_URL only needed outside dev
-cd ../server && npm run dev        # start the backend first
-cd ../client && npm run dev        # http://localhost:5173 — /api/* proxied to :3000
-npm run build                      # type-check + production build → dist/
-```
