@@ -12,6 +12,8 @@ export interface UserProfile {
   image: string | null;
   bio: string | null;
   theme: 'light' | 'dark' | null;
+  onboardingComplete: boolean;
+  isPublic: boolean;
 }
 
 export function useMe() {

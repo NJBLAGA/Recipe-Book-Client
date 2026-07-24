@@ -15,7 +15,7 @@ export const Route = createFileRoute('/_app')({
 });
 
 const navItems = [
-  { to: '/recipes',       label: 'My Recipes',   shortLabel: 'Recipes',   icon: BookOpenText, exact: false },
+  { to: '/recipes',       label: 'Recipe Book',  shortLabel: 'Recipes',   icon: BookOpenText, exact: false },
   { to: '/community',    label: 'Community',     shortLabel: 'Community', icon: Users,        exact: false },
   { to: '/profile',      label: 'Profile',       shortLabel: 'Profile',   icon: UserCircle,   exact: false },
   { to: '/pantry',       label: 'My Pantry',     shortLabel: 'Pantry',    icon: Refrigerator, exact: false },

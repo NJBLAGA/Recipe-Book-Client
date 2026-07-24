@@ -18,6 +18,8 @@ interface RecipePdfProps {
   description: string | null;
   source: string | null;
   servings: number;
+  prepTime: number | null;
+  cookTime: number | null;
   ingredients: Ingredient[];
   steps: RecipeStep[];
 }
@@ -44,6 +46,15 @@ const s = StyleSheet.create({
     fontFamily: 'Helvetica-Bold',
     color: '#444444',
     marginBottom: 4,
+  },
+  timeRow: {
+    flexDirection: 'row' as const,
+    gap: 20,
+    marginBottom: 4,
+  },
+  timeTag: {
+    fontSize: 9,
+    color: '#666666',
   },
   categoryTag: {
     fontSize: 9,
@@ -104,33 +115,40 @@ const s = StyleSheet.create({
   stepsSection: {},
   stepRow: {
     flexDirection: 'row',
-    marginBottom: 14,
+    marginBottom: 16,
+    alignItems: 'flex-start',
   },
   stepNum: {
     fontSize: 10,
     fontFamily: 'Helvetica-Bold',
     color: '#999999',
     width: 22,
+    paddingTop: 1,
+  },
+  stepContent: {
+    flex: 1,
   },
   stepText: {
     fontSize: 10,
     color: '#111111',
-    flex: 1,
+    lineHeight: 1.5,
   },
   subStepRow: {
     flexDirection: 'row',
-    marginTop: 6,
-    marginLeft: 10,
+    marginTop: 5,
+    marginLeft: 8,
   },
   subBullet: {
     fontSize: 9,
     color: '#bbbbbb',
     width: 14,
+    paddingTop: 1,
   },
   subStepText: {
     fontSize: 9,
     color: '#555555',
     flex: 1,
+    lineHeight: 1.4,
   },
 
   // ── Footer ──────────────────────────────────────────────────────────────────
@@ -148,6 +166,14 @@ const s = StyleSheet.create({
   },
 });
 
+function fmtTime(mins: number | null): string | null {
+  if (mins == null || mins <= 0) return null;
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m === 0 ? `${h} hr` : `${h} hr ${m} min`;
+}
+
 function qtyLabel(ing: Ingredient): string {
   const parts: string[] = [];
   if (ing.quantity) parts.push(ing.quantity);
@@ -161,9 +187,13 @@ export function RecipePdf({
   description,
   source,
   servings,
+  prepTime,
+  cookTime,
   ingredients,
   steps,
 }: RecipePdfProps) {
+  const prep = fmtTime(prepTime);
+  const cook = fmtTime(cookTime);
   return (
     <Document>
       <Page size="A4" style={s.page}>
@@ -171,6 +201,12 @@ export function RecipePdf({
         {/* Header */}
         <Text style={s.title}>{title}</Text>
         <Text style={s.servingsTag}>Serves {servings}</Text>
+        {(prep || cook) ? (
+          <View style={s.timeRow}>
+            {prep ? <Text style={s.timeTag}>Prep: {prep}</Text> : null}
+            {cook ? <Text style={s.timeTag}>Cook: {cook}</Text> : null}
+          </View>
+        ) : null}
         {categoryName ? <Text style={s.categoryTag}>{categoryName}</Text> : null}
         {source ? <Text style={s.sourceTag}>Source: {source}</Text> : null}
 
@@ -209,9 +245,9 @@ export function RecipePdf({
           <View style={s.stepsSection}>
             <Text style={s.sectionHeader}>Method</Text>
             {steps.map((step, i) => (
-              <View key={i} style={s.stepRow}>
+              <View key={i} style={s.stepRow} wrap={false}>
                 <Text style={s.stepNum}>{i + 1}.</Text>
-                <View style={{ flex: 1 }}>
+                <View style={s.stepContent}>
                   <Text style={s.stepText}>{step.text}</Text>
                   {step.subSteps.map((sub, j) => (
                     <View key={j} style={s.subStepRow}>

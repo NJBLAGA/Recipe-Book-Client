@@ -39,6 +39,7 @@ interface Category { id: string; name: string; recipeBookId: string; }
 
 interface RecipeSummary {
   id: string; title: string; description: string | null; source: string | null; baseServings: number;
+  prepTime: number | null; cookTime: number | null;
   categoryId: string | null; categoryName: string | null;
   images: string[]; createdAt: string; updatedAt: string;
 }
@@ -197,6 +198,40 @@ function PantryIcon({ status }: { status: 'in-stock' | 'missing' }) {
     : <XCircle className="h-4 w-4 shrink-0 text-rose-500" />;
 }
 
+// Apply Cloudinary delivery transforms so uploaded images are served at a
+// sensible resolution rather than full-resolution. Non-Cloudinary URLs pass through unchanged.
+function cloudinaryUrl(url: string, width = 1200): string {
+  if (!url.includes('res.cloudinary.com')) return url;
+  return url.replace('/upload/', `/upload/c_limit,w_${width},h_${width},q_auto,f_auto/`);
+}
+
+function formatTime(mins: number | null | undefined): string | null {
+  if (mins == null || mins <= 0) return null;
+  return `${mins} min`;
+}
+
+function TimeBadges({ prepTime, cookTime }: { prepTime?: number | null; cookTime?: number | null }) {
+  const prep = formatTime(prepTime);
+  const cook = formatTime(cookTime);
+  if (!prep && !cook) return null;
+  return (
+    <div className="flex items-center gap-3 flex-wrap">
+      {prep && (
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Clock className="h-3.5 w-3.5 text-primary shrink-0" />
+          <span className="font-medium text-foreground">Prep:</span>{prep}
+        </span>
+      )}
+      {cook && (
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Clock className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+          <span className="font-medium text-foreground">Cook:</span>{cook}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function StarDisplay({ rating }: { rating: number }) {
   const rounded = Math.round(rating * 2) / 2;
   return (
@@ -348,6 +383,8 @@ interface RecipeFormState {
   description: string;
   source: string;
   baseServings: string;
+  prepTime: string;
+  cookTime: string;
   categoryId: string;
   steps: RecipeStep[];
   ingredients: Array<IngredientRow & { sortOrder: number }>;
@@ -387,6 +424,8 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
     description: initial?.description ?? '',
     source: initial?.source ?? '',
     baseServings: initial?.baseServings ?? '4',
+    prepTime: initial?.prepTime ?? '',
+    cookTime: initial?.cookTime ?? '',
     categoryId: initial?.categoryId ?? '',
     steps: initial?.steps?.length ? initial.steps : [emptyStep()],
     ingredients: initial?.ingredients?.length ? initial.ingredients : [emptyRow(0)],
@@ -399,6 +438,8 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
         description: initial?.description ?? '',
         source: initial?.source ?? '',
         baseServings: initial?.baseServings ?? '4',
+        prepTime: initial?.prepTime ?? '',
+        cookTime: initial?.cookTime ?? '',
         categoryId: initial?.categoryId ?? '',
         steps: initial?.steps?.length ? initial.steps : [emptyStep()],
         ingredients: initial?.ingredients?.length ? initial.ingredients : [emptyRow(0)],
@@ -572,11 +613,15 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
 
       if (!form.categoryId) throw new Error('Category is required');
 
+      const parsedPrep = parseInt(form.prepTime);
+      const parsedCook = parseInt(form.cookTime);
       const body = {
         title: form.title.trim(),
         description: form.description.trim() || undefined,
         source: form.source.trim(),
         baseServings: servings,
+        prepTime: !isNaN(parsedPrep) && parsedPrep >= 0 ? parsedPrep : null,
+        cookTime: !isNaN(parsedCook) && parsedCook >= 0 ? parsedCook : null,
         categoryId: form.categoryId,
         steps,
         ingredients,
@@ -999,6 +1044,20 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
                       </div>
                     </div>
 
+                    {/* Prep & Cook time */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Prep Time (mins)</label>
+                        <Input className="h-9" type="number" min="0" placeholder="e.g. 15" value={form.prepTime}
+                          onChange={(e) => setForm((p) => ({ ...p, prepTime: e.target.value }))} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cook Time (mins)</label>
+                        <Input className="h-9" type="number" min="0" placeholder="e.g. 30" value={form.cookTime}
+                          onChange={(e) => setForm((p) => ({ ...p, cookTime: e.target.value }))} />
+                      </div>
+                    </div>
+
                     {/* Photos */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
@@ -1106,7 +1165,7 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
                                   <ArrowDown className="h-3 w-3" />
                                 </button>
                               </div>
-                              <Textarea className="resize-none text-sm flex-1 min-h-[64px]" placeholder={`Step ${idx + 1}…`}
+                              <Textarea className="resize-none text-sm flex-1 min-h-[120px]" placeholder={`Step ${idx + 1}…`}
                                 value={step.text} onChange={(e) => setStep(idx, e.target.value)} />
                               <button type="button" onClick={() => removeStep(idx)}
                                 className="pt-2 shrink-0 text-muted-foreground hover:text-destructive transition-colors">
@@ -1578,6 +1637,8 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
           description={recipe.description}
           source={recipe.source}
           servings={effective}
+          prepTime={recipe.prepTime ?? null}
+          cookTime={recipe.cookTime ?? null}
           ingredients={scaledIngredients}
           steps={convertedSteps}
         />
@@ -1608,45 +1669,42 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
     <>
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="w-[calc(100vw-16px)] max-w-2xl p-0 gap-0 flex flex-col h-[92vh] overflow-hidden" hideClose onOpenAutoFocus={(e) => e.preventDefault()}>
+        <DialogClose className="absolute right-3 top-3 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-background/90 border border-border/60 shadow-md text-foreground hover:bg-muted transition-colors backdrop-blur-sm">
+          <X className="h-4 w-4" />
+        </DialogClose>
+
         {images.length > 0 ? (
-          <div className="relative shrink-0 h-48 bg-muted overflow-hidden">
-            <img src={images[imgIdx].url} alt="" className="h-full w-full object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
-            <button type="button"
-              onClick={() => setLightboxIdx(imgIdx)}
-              className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-white text-[10px] font-medium hover:bg-black/70 transition-colors z-10">
-              <Maximize2 className="h-3 w-3" />Expand
-            </button>
-            {images.length > 1 && (
-              <>
-                <button type="button" onClick={(e) => { e.stopPropagation(); setImgIdx((i) => Math.max(0, i - 1)); }}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white">
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                <button type="button" onClick={(e) => { e.stopPropagation(); setImgIdx((i) => Math.min(images.length - 1, i + 1)); }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white">
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
-                  {images.map((_, i) => (
-                    <button key={i} type="button" onClick={(e) => { e.stopPropagation(); setImgIdx(i); }}
-                      className={cn('h-1.5 rounded-full transition-all', i === imgIdx ? 'w-4 bg-white' : 'w-1.5 bg-white/50')} />
-                  ))}
-                </div>
-              </>
-            )}
-            <DialogClose className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 transition-colors"
-              onClick={(e) => e.stopPropagation()}>
-              <X className="h-4 w-4" />
-            </DialogClose>
+          <div className="shrink-0 px-4 pt-4 pb-1 bg-background">
+            <div className="relative h-44 rounded-xl overflow-hidden bg-muted">
+              <img src={cloudinaryUrl(images[imgIdx].url, 800)} alt="" className="h-full w-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
+              <button type="button"
+                onClick={() => setLightboxIdx(imgIdx)}
+                className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-white text-[10px] font-medium hover:bg-black/70 transition-colors z-10">
+                <Maximize2 className="h-3 w-3" />Expand
+              </button>
+              {images.length > 1 && (
+                <>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); setImgIdx((i) => (i - 1 + images.length) % images.length); }}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white">
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); setImgIdx((i) => (i + 1) % images.length); }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white">
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+                    {images.map((_, i) => (
+                      <button key={i} type="button" onClick={(e) => { e.stopPropagation(); setImgIdx(i); }}
+                        className={cn('h-1.5 rounded-full transition-all', i === imgIdx ? 'w-4 bg-white' : 'w-1.5 bg-white/50')} />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         ) : (
-          <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b">
-            <div />
-            <DialogClose className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-accent transition-colors">
-              <X className="h-4 w-4" />
-            </DialogClose>
-          </div>
+          <div className="shrink-0 h-10" />
         )}
 
         {/* ── Title + edit/delete — outside scroll so the Slider can't push it off ── */}
@@ -1778,6 +1836,8 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
                 </div>
               )}
 
+              <TimeBadges prepTime={recipe.prepTime} cookTime={recipe.cookTime} />
+
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold">Ingredients</h3>
@@ -1809,13 +1869,15 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
                         ) : (
                           <PantryIcon status={status} />
                         )}
-                        <div className="flex-1 min-w-0">
-                          <span className={cn('text-sm', ticked && 'line-through')}>
-                            {converted.qty && <span className="font-medium">{converted.qty} {converted.unit} </span>}
-                            {ing.name}
-                            {ing.note && <span className="text-muted-foreground text-xs"> — {ing.note}</span>}
-                          </span>
-                        </div>
+                        <span className={cn('flex-1 min-w-0 text-sm', ticked && 'line-through')}>
+                          {converted.qty && (
+                            <span className="font-medium tabular-nums text-foreground/70">
+                              {converted.qty}{converted.unit ? ` ${converted.unit}` : ''}{' '}
+                            </span>
+                          )}
+                          {ing.name}
+                          {ing.note && <span className="text-muted-foreground text-xs"> — {ing.note}</span>}
+                        </span>
                         {!isCooking && (
                           <button type="button" title="Add to shopping list"
                             onClick={() => openAddToShop(ing.name)}
@@ -2092,9 +2154,9 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
               </>
             )}
             <img
-              src={images[lightboxIdx].url}
+              src={cloudinaryUrl(images[lightboxIdx].url)}
               alt=""
-              className="max-h-[60vh] max-w-[80vw] sm:max-h-[70vh] sm:max-w-[85vw] lg:max-h-[90vh] lg:max-w-[90vw] object-contain rounded-xl shadow-2xl"
+              className="max-h-[45vh] max-w-[calc(100%-120px)] object-contain rounded-xl shadow-2xl"
             />
             {images.length > 1 && (
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-10">
@@ -2493,10 +2555,10 @@ function RecipeCard({ recipe, onClick }: { recipe: RecipeSummary; onClick: () =>
           </div>
         )}
       </div>
-      <div className="p-2.5">
+      <div className="p-2.5 space-y-1">
         <p className="font-semibold text-sm leading-tight line-clamp-2">{recipe.title}</p>
         {recipe.description && (
-          <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">{recipe.description}</p>
+          <p className="text-[11px] text-muted-foreground line-clamp-1">{recipe.description}</p>
         )}
       </div>
     </div>
@@ -2541,7 +2603,7 @@ function CookingHistoryTab({ entries, inProgressEntries, isLoading, onViewUser, 
   return (
     <div className="space-y-4">
       {/* Sub-tabs */}
-      <div className="flex rounded-xl border border-border/50 bg-muted/30 p-0.5 gap-0.5">
+      <div className="flex w-full bg-card border-b border-border">
         {([
           { id: 'in-progress' as const, label: 'In Progress', count: inProgressEntries.length },
           { id: 'completed' as const, label: 'Completed', count: entries.length },
@@ -2549,8 +2611,10 @@ function CookingHistoryTab({ entries, inProgressEntries, isLoading, onViewUser, 
           <button key={id} type="button"
             onClick={() => setSubTab(id)}
             className={cn(
-              'flex-1 flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-semibold transition-all',
-              subTab === id ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground',
+              'flex-1 flex items-center justify-center gap-1.5 h-12 text-[10px] sm:text-xs font-medium transition-all',
+              subTab === id
+                ? 'bg-background border-b-2 border-primary text-foreground'
+                : 'text-muted-foreground hover:text-foreground',
             )}>
             {label}
             {count > 0 && (
@@ -2870,6 +2934,15 @@ function RecipesPage() {
   const [letterFilter, setLetterFilter] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [inProgressOnly, setInProgressOnly] = useState(false);
+  const [maxPrepTime, setMaxPrepTime] = useState<number | null>(null);
+  const [maxCookTime, setMaxCookTime] = useState<number | null>(null);
+  const [page, setPage] = useState(1);
+  const [recipesPerPage, setRecipesPerPage] = useState(() => window.innerWidth >= 640 ? 12 : 8);
+  useEffect(() => {
+    const update = () => setRecipesPerPage(window.innerWidth >= 640 ? 12 : 8);
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<'idle' | 'scan' | 'url'>('idle');
@@ -2932,10 +3005,23 @@ function RecipesPage() {
     if (letterFilter && !r.title.toUpperCase().startsWith(letterFilter)) return false;
     if (canMakeFilter === 'can-make' && canMakeIds && !canMakeIds.has(r.id)) return false;
     if (inProgressOnly && !inProgressRecipeIds.has(r.id)) return false;
+    if (maxPrepTime != null) {
+      if (maxPrepTime === 60) { if (r.prepTime == null || r.prepTime < 60) return false; }
+      else { if (r.prepTime == null || r.prepTime > maxPrepTime) return false; }
+    }
+    if (maxCookTime != null) {
+      if (maxCookTime === 60) { if (r.cookTime == null || r.cookTime < 60) return false; }
+      else { if (r.cookTime == null || r.cookTime > maxCookTime) return false; }
+    }
     return true;
   });
 
-  const hasActiveFilters = activeCategoryId !== null || sortBy !== 'alpha' || canMakeFilter !== 'all' || inProgressOnly;
+  const totalPages = Math.ceil(displayedRecipes.length / recipesPerPage);
+  const paginatedRecipes = displayedRecipes.slice((page - 1) * recipesPerPage, page * recipesPerPage);
+
+  useEffect(() => { setPage(1); }, [debouncedSearch, activeCategoryId, sortBy, canMakeFilter, inProgressOnly, maxPrepTime, maxCookTime, letterFilter, recipesPerPage]);
+
+  const hasActiveFilters = activeCategoryId !== null || sortBy !== 'alpha' || canMakeFilter !== 'all' || inProgressOnly || maxPrepTime != null || maxCookTime != null;
 
   // Open a specific recipe modal when navigated here with ?openRecipeId=...
   useEffect(() => {
@@ -2970,6 +3056,8 @@ function RecipesPage() {
         description: editRecipe.description ?? '',
         source: editRecipe.source ?? '',
         baseServings: String(editRecipe.baseServings),
+        prepTime: editRecipe.prepTime != null ? String(editRecipe.prepTime) : '',
+        cookTime: editRecipe.cookTime != null ? String(editRecipe.cookTime) : '',
         categoryId: editRecipe.categoryId ?? '',
         steps: editRecipe.steps,
         ingredients: editRecipe.ingredients.map((ing, i) => ({
@@ -2987,7 +3075,7 @@ function RecipesPage() {
       <div data-timer-align className="w-full max-w-md sm:max-w-xl lg:max-w-3xl xl:max-w-5xl">
 
         {/* Header */}
-        <div className="mb-1 flex items-center gap-2">
+        <div className="mb-1 flex items-center gap-2" data-tour="recipe-header">
           <BookOpenText className="h-5 w-5 text-primary shrink-0" />
           <h1 className="text-xl font-bold">Recipe Book</h1>
         </div>
@@ -2996,7 +3084,7 @@ function RecipesPage() {
         </p>
 
         {/* Tabs */}
-        <div className="flex rounded-xl border border-border/60 bg-muted/40 p-1 gap-1 mb-5">
+        <div className="flex w-full bg-card border-b border-border mb-5">
           {([
             { id: 'recipes' as const, label: 'Recipe Book', icon: BookOpenText },
             { id: 'history' as const, label: 'Cooking History', icon: History },
@@ -3004,9 +3092,9 @@ function RecipesPage() {
             <button key={id} type="button"
               onClick={() => setActiveTab(id)}
               className={cn(
-                'flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition-all',
+                'flex-1 flex items-center justify-center gap-1.5 h-12 text-[10px] sm:text-xs lg:text-sm font-medium transition-all',
                 activeTab === id
-                  ? 'bg-card shadow-sm text-foreground'
+                  ? 'bg-background border-b-2 border-primary text-foreground'
                   : 'text-muted-foreground hover:text-foreground',
               )}>
               <Icon className="h-3.5 w-3.5" />{label}
@@ -3026,13 +3114,13 @@ function RecipesPage() {
 
         {/* Action buttons — 50/50 */}
         <div className="flex gap-2 mb-2">
-          <div className="w-1/2">
+          <div className="w-1/2" data-tour="add-recipe">
             <Button className="w-full gap-1.5 h-9 text-sm" onClick={() => setAddRecipeOpen((v) => !v)}>
               <Plus className="h-4 w-4" />Add Recipe
               <ChevronDown className={cn('h-3.5 w-3.5 ml-auto transition-transform duration-200', addRecipeOpen && 'rotate-180')} />
             </Button>
           </div>
-          <div className="w-1/2">
+          <div className="w-1/2" data-tour="recipe-categories">
             <Button variant="outline" className="w-full gap-1.5 h-9 text-sm" onClick={() => setCategoryPanelOpen(true)}>
               <Tag className="h-4 w-4" />Manage Categories
             </Button>
@@ -3168,9 +3256,47 @@ function RecipesPage() {
                 )}
               </div>
 
+              {/* Prep Time */}
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Prep Time</p>
+                <div className="flex flex-wrap gap-1.5">
+                  <button type="button" onClick={() => setMaxPrepTime(null)}
+                    className={cn('rounded-full px-3 py-1 text-xs font-medium border transition-colors',
+                      maxPrepTime === null ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:text-foreground')}>
+                    All
+                  </button>
+                  {([{ value: 15, label: '15m' }, { value: 30, label: '30m' }, { value: 60, label: '60+' }] as const).map(({ value, label }) => (
+                    <button key={value} type="button" onClick={() => setMaxPrepTime(value)}
+                      className={cn('rounded-full px-3 py-1 text-xs font-medium border transition-colors',
+                        maxPrepTime === value ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:text-foreground')}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Cook Time */}
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Cook Time</p>
+                <div className="flex flex-wrap gap-1.5">
+                  <button type="button" onClick={() => setMaxCookTime(null)}
+                    className={cn('rounded-full px-3 py-1 text-xs font-medium border transition-colors',
+                      maxCookTime === null ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:text-foreground')}>
+                    All
+                  </button>
+                  {([{ value: 15, label: '15m' }, { value: 30, label: '30m' }, { value: 60, label: '60+' }] as const).map(({ value, label }) => (
+                    <button key={value} type="button" onClick={() => setMaxCookTime(value)}
+                      className={cn('rounded-full px-3 py-1 text-xs font-medium border transition-colors',
+                        maxCookTime === value ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:text-foreground')}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {hasActiveFilters && (
                 <button type="button"
-                  onClick={() => { setActiveCategoryId(null); setSortBy('alpha'); setCanMakeFilter('all'); setInProgressOnly(false); }}
+                  onClick={() => { setActiveCategoryId(null); setSortBy('alpha'); setCanMakeFilter('all'); setInProgressOnly(false); setMaxPrepTime(null); setMaxCookTime(null); }}
                   className="text-[11px] text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2">
                   Clear all filters
                 </button>
@@ -3207,11 +3333,32 @@ function RecipesPage() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {displayedRecipes.map((r) => (
-              <RecipeCard key={r.id} recipe={r} onClick={() => setSelectedRecipeId(r.id)} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3" data-tour="recipe-card">
+              {paginatedRecipes.map((r) => (
+                <RecipeCard key={r.id} recipe={r} onClick={() => setSelectedRecipeId(r.id)} />
+              ))}
+            </div>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-3 mt-5 pb-1">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-border disabled:opacity-40 hover:bg-muted transition-colors">
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="text-xs text-muted-foreground tabular-nums">{page} / {totalPages}</span>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-border disabled:opacity-40 hover:bg-muted transition-colors">
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+          </>
         )}
         </>)}
       </div>

@@ -5,6 +5,8 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { ThemeProvider } from 'next-themes';
 import { Toaster } from '@/components/ui/sonner';
 import { queryClient } from '@/lib/query';
+import { TourProvider } from '@/contexts/TourContext';
+import { TourOverlay } from '@/components/TourOverlay';
 
 interface ErrorBoundaryState { hasError: boolean }
 
@@ -48,11 +50,14 @@ function RootLayout() {
   return (
     <ThemeProvider attribute="class" defaultTheme="light" disableTransitionOnChange>
       <QueryClientProvider client={queryClient}>
-        <ErrorBoundary>
-          <Outlet />
-        </ErrorBoundary>
-        <Toaster position="top-center" />
-        {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
+        <TourProvider>
+          <TourOverlay />
+          <ErrorBoundary>
+            <Outlet />
+          </ErrorBoundary>
+          <Toaster position="top-center" />
+          {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
+        </TourProvider>
       </QueryClientProvider>
     </ThemeProvider>
   );

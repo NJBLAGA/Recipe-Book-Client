@@ -1082,7 +1082,7 @@ function PantryPage() {
       <div data-timer-align className="w-full max-w-md sm:max-w-xl lg:max-w-3xl xl:max-w-5xl">
 
         {/* Header */}
-        <div className="mb-1 flex items-center gap-2">
+        <div className="mb-1 flex items-center gap-2" data-tour="pantry-header">
           <Refrigerator className="h-5 w-5 text-primary shrink-0" />
           <h1 className="text-xl font-bold">Pantry</h1>
         </div>
@@ -1092,7 +1092,7 @@ function PantryPage() {
 
         {/* Row 1: Add Item + Manage Categories (exact 50/50) */}
         <div className="grid grid-cols-2 gap-2 mb-2">
-          <Button className="w-full gap-1.5 h-9 text-sm" onClick={() => { setEditItem(null); setAddOpen(true); }}>
+          <Button className="w-full gap-1.5 h-9 text-sm" data-tour="add-pantry-item" onClick={() => { setEditItem(null); setAddOpen(true); }}>
             <Plus className="h-4 w-4" />Add Item
           </Button>
           <Button variant="outline" className="w-full gap-1.5 h-9 text-sm" onClick={() => setCategoryPanelOpen(true)}>
@@ -1215,7 +1215,7 @@ function PantryPage() {
               className="text-xs text-primary hover:underline">Clear filters</button>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-6" data-tour="pantry-item">
             {activeCategoryId ? (
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
                 {pagedItems.map((item) => (

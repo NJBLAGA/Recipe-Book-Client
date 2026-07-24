@@ -418,7 +418,7 @@ function CategorySection({ label, items, onToggle, onMove, onView }: {
       </button>
       {!collapsed && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2" data-tour="shopping-item">
             {items.length === 0 ? (
               <p className="col-span-full text-xs text-muted-foreground text-center py-3 italic">No items in this category</p>
             ) : pageItems.map((item, idx) => {
@@ -658,7 +658,7 @@ function ShoppingListPage() {
       <div data-timer-align className="w-full max-w-3xl lg:max-w-5xl xl:max-w-6xl">
 
         {/* Header */}
-        <div className="mb-1 flex items-center gap-2">
+        <div className="mb-1 flex items-center gap-2" data-tour="shopping-header">
           <ShoppingCart className="h-5 w-5 text-primary shrink-0" />
           <h1 className="text-xl font-bold">Shopping List</h1>
         </div>
@@ -668,7 +668,7 @@ function ShoppingListPage() {
 
         {/* Row 1: Add Item + Manage Categories */}
         <div className="flex gap-2 mb-2">
-          <Button className="flex-1 gap-1.5 h-9 text-sm" onClick={() => setAddModalOpen(true)}>
+          <Button className="flex-1 gap-1.5 h-9 text-sm" data-tour="add-shopping-item" onClick={() => setAddModalOpen(true)}>
             <Plus className="h-4 w-4" />Add Item
           </Button>
           <Button variant="outline" className="flex-1 gap-1.5 h-9 text-sm" onClick={() => setCategoryPanelOpen(true)}>
@@ -761,7 +761,7 @@ function ShoppingListPage() {
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary/30 border-t-transparent" />
           </div>
         ) : (
-          <div className="space-y-5">
+          <div className="space-y-5" data-tour="shopping-category">
             {/* All named categories (shown even if empty) */}
             {categories.map((cat) => {
               const catItems = itemsByCategoryId.get(cat.id) ?? [];

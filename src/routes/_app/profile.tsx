@@ -1,5 +1,5 @@
 import React from 'react';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
@@ -12,7 +12,7 @@ import {
   DoorOpen, ArrowLeftRight, Mail, Crown, Home, TriangleAlert,
   Star, UtensilsCrossed, X, UserPlus, Search, ChevronUp, ChevronDown,
   Plus, Globe, Lock, Send, BookOpen, Eye, Copy, Users,
-  ChevronLeft, ChevronRight, Scale, ChefHat, Maximize2, UserCircle,
+  ChevronLeft, ChevronRight, Scale, ChefHat, Maximize2, UserCircle, Map, Clock, Loader2,
 } from 'lucide-react';
 import { authClient } from '@/lib/auth';
 import { api, ApiError } from '@/lib/api';
@@ -39,6 +39,8 @@ import { Slider } from '@/components/ui/slider';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { cn } from '@/lib/utils';
 import { RecipeMetaLine } from '@/components/SourceDisplay';
+import { useTour } from '@/contexts/TourContext';
+import { UserBioModal } from '@/components/UserBioModal';
 
 export const Route = createFileRoute('/_app/profile')({
   component: ProfilePage,
@@ -93,7 +95,8 @@ interface RecipeStep { text: string; subSteps: string[]; }
 
 interface RecipeDetail {
   id: string; title: string; description: string | null; source: string | null;
-  baseServings: number; steps: RecipeStep[]; categoryName: string | null;
+  baseServings: number; prepTime: number | null; cookTime: number | null;
+  steps: RecipeStep[]; categoryName: string | null;
   ingredients: RecipeIngredient[];
   images: { url: string; sortOrder: number }[];
 }
@@ -147,6 +150,23 @@ const profileSchema = z.object({
 const emailSchema = z.object({ newEmail: z.string().email('Enter a valid email') });
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function formatTime(mins: number | null | undefined): string | null {
+  if (mins == null || mins <= 0) return null;
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60); const m = mins % 60;
+  return m === 0 ? `${h} hr` : `${h} hr ${m} min`;
+}
+function TimeBadges({ prepTime, cookTime }: { prepTime?: number | null; cookTime?: number | null }) {
+  const prep = formatTime(prepTime); const cook = formatTime(cookTime);
+  if (!prep && !cook) return null;
+  return (
+    <div className="flex items-center gap-4 flex-wrap">
+      {prep && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="h-3.5 w-3.5 text-primary shrink-0" /><span className="font-medium text-foreground">Prep:</span>{prep}</span>}
+      {cook && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="h-3.5 w-3.5 text-amber-500 shrink-0" /><span className="font-medium text-foreground">Cook:</span>{cook}</span>}
+    </div>
+  );
+}
 
 function initials(name: string | null, fallback: string) {
   if (!name) return fallback[0]?.toUpperCase() ?? '?';
@@ -284,7 +304,7 @@ function ProfilePage() {
   return (
     <div className="flex flex-col items-center px-4 pb-24 pt-6">
       <div data-timer-align className="w-full max-w-md sm:max-w-xl lg:max-w-2xl xl:max-w-3xl">
-        <div className="mb-1 flex items-center gap-2">
+        <div className="mb-1 flex items-center gap-2" data-tour="profile-card">
           <UserCircle className="h-5 w-5 text-primary shrink-0" />
           <h1 className="text-xl font-bold">My Profile</h1>
         </div>
@@ -297,6 +317,7 @@ function ProfilePage() {
             <TabsList className="w-full h-12 rounded-none bg-card border-b p-0 gap-0">
               {(['settings', 'household', 'notifications'] as const).map((tab) => (
                 <TabsTrigger key={tab} value={tab}
+                  data-tour={tab === 'household' ? 'profile-household' : tab === 'notifications' ? 'profile-notifications' : undefined}
                   className="flex-1 h-full rounded-none capitalize text-xs sm:text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=inactive]:text-muted-foreground">
                   {tab === 'notifications' ? (
                     <span className="inline-flex items-center gap-1.5">
@@ -324,6 +345,44 @@ function ProfilePage() {
             </TabsContent>
           </div>
         </Tabs>
+      </div>
+    </div>
+  );
+}
+
+// ─── Take tour button (settings tab) ─────────────────────────────────────────
+
+function TakeTourButton({ household }: { household: { id: string; name: string; role: 'OWNER' | 'USER' } | null }) {
+  const { startTour, isTourActive } = useTour();
+  const hasHousehold = !!household;
+  return (
+    <div className="p-5 border-t">
+      <div className="flex items-start gap-3">
+        <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-full mt-0.5', hasHousehold ? 'bg-primary/10' : 'bg-muted')}>
+          <Map className={cn('h-4 w-4', hasHousehold ? 'text-primary' : 'text-muted-foreground')} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-medium text-sm">App Tour</p>
+          {hasHousehold ? (
+            <p className="text-muted-foreground text-xs mt-0.5 leading-relaxed">
+              Walk through a demo showing all sections of the app with fake data — no changes to your real content.
+            </p>
+          ) : (
+            <p className="text-muted-foreground text-xs mt-0.5 leading-relaxed">
+              Join or create a household first to access the tour.
+            </p>
+          )}
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-3"
+            disabled={!hasHousehold || isTourActive}
+            onClick={startTour}
+          >
+            <Map className="h-3.5 w-3.5 mr-1.5" />
+            {isTourActive ? 'Tour in progress…' : 'Take the tour'}
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -624,6 +683,9 @@ function SettingsTab({ me, household }: {
       <div className="p-5">
         <PinnedRecipesSection household={household} />
       </div>
+
+      {/* ── Tour ── */}
+      <TakeTourButton household={household} />
 
       {/* ── Delete Account ── */}
       <div className="p-5 space-y-3">
@@ -1037,12 +1099,16 @@ function PinViewModal({ slot, open, onClose }: { slot: PinSlot; open: boolean; o
                     const scaledQty = scaleQty(ing.quantity, base, effectiveServings);
                     const converted = convertQty(scaledQty, ing.unit, system);
                     return (
-                      <div key={ing.id} className="flex gap-2.5 items-start text-sm">
-                        <ChefHat className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0 opacity-70" />
-                        <span>
-                          {converted.qty && <span className="font-medium">{converted.qty}{converted.unit ? ` ${converted.unit}` : ''} </span>}
+                      <div key={ing.id} className="flex gap-2 items-baseline text-sm">
+                        <ChefHat className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0 opacity-70 self-start" />
+                        <span className="flex-1 min-w-0">
+                          {converted.qty && (
+                            <span className="font-medium tabular-nums text-foreground/75 text-xs">
+                              {converted.qty}{converted.unit ? ` ${converted.unit}` : ''}{' '}
+                            </span>
+                          )}
                           {ing.name}
-                          {ing.note && <span className="text-muted-foreground"> ({ing.note})</span>}
+                          {ing.note && <span className="text-muted-foreground text-xs"> — {ing.note}</span>}
                         </span>
                       </div>
                     );
@@ -1614,13 +1680,18 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
                       const scaledQty = scaleQty(ing.quantity, base, effectiveServings);
                       const converted = convertQty(scaledQty, ing.unit, system);
                       return (
-                        <li key={ing.id} className="flex items-baseline gap-2 text-sm list-none">
-                          <span className="shrink-0 font-medium tabular-nums">
-                            {converted.qty ? `${converted.qty}${converted.unit ? ` ${converted.unit}` : ''}` : ''}
+                        <div key={ing.id} className="flex gap-2 items-baseline text-sm">
+                          <ChefHat className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0 opacity-70 self-start" />
+                          <span className="flex-1 min-w-0">
+                            {converted.qty && (
+                              <span className="font-medium tabular-nums text-foreground/75 text-xs">
+                                {converted.qty}{converted.unit ? ` ${converted.unit}` : ''}{' '}
+                              </span>
+                            )}
+                            {ing.name}
+                            {ing.note && <span className="text-muted-foreground text-xs"> — {ing.note}</span>}
                           </span>
-                          <span className="text-foreground/85">{ing.name}</span>
-                          {ing.note && <span className="text-muted-foreground text-xs">({ing.note})</span>}
-                        </li>
+                        </div>
                       );
                     })}
                   </div>
@@ -2077,6 +2148,11 @@ function HouseholdNotifications({ household, seenNotifIds, onMarkSeen }: {
   onMarkSeen: (ids: string[]) => void;
 }) {
   const queryClient = useQueryClient();
+  const [bioTarget, setBioTarget] = useState<{ userId: string; name: string | null; handle: string | null; image: string | null } | null>(null);
+  const [pinViewTarget, setPinViewTarget] = useState<PinViewTarget | null>(null);
+
+  const { data: meData } = useQuery({ queryKey: queryKeys.users.me(), queryFn: () => api.get<MeData>('/api/users/me') });
+  const meId = meData?.id ?? '';
 
   const { data: pending, isLoading } = useQuery({
     queryKey: queryKeys.household.pending(),
@@ -2115,6 +2191,7 @@ function HouseholdNotifications({ household, seenNotifIds, onMarkSeen }: {
   const hasOutbound = outboundRequests.length > 0 || outboundInvites.length > 0;
 
   return (
+    <>
     <Tabs defaultValue="inbound">
       <TabsList className="w-full h-8 mb-4 rounded-lg bg-muted/40 border border-border/50 p-0.5">
         <TabsTrigger value="inbound" className="flex-1 text-[11px] h-7 rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm">
@@ -2143,19 +2220,29 @@ function HouseholdNotifications({ household, seenNotifIds, onMarkSeen }: {
           <div key={item.id} className="rounded-xl border border-border/60 bg-card/80 p-3 space-y-2.5">
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
-                {item.fromImage && (
-                  <Avatar className="h-7 w-7 shrink-0">
-                    <AvatarImage src={item.fromImage} />
+                <button
+                  type="button"
+                  className="shrink-0"
+                  onClick={() => setBioTarget({ userId: item.id, name: item.fromName, handle: item.fromHandle, image: item.fromImage })}>
+                  <Avatar className="h-7 w-7 hover:ring-2 hover:ring-primary transition-all cursor-pointer">
+                    <AvatarImage src={item.fromImage ?? undefined} />
                     <AvatarFallback className="text-[10px]">{initials(item.fromName, item.fromHandle ?? '?')}</AvatarFallback>
                   </Avatar>
-                )}
+                </button>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">
                     {item.type === 'INVITE' ? `Invite To ${item.householdName}` : `${item.fromHandle ? '@' + item.fromHandle : item.fromName ?? 'Someone'} Wants To Join`}
                   </p>
-                  <p className="text-muted-foreground truncate text-xs mt-0.5">
-                    {item.type === 'INVITE' ? `From ${item.fromHandle ? '@' + item.fromHandle : item.fromName ?? 'someone'}` : item.householdName}
-                  </p>
+                  {item.type === 'INVITE' ? (
+                    <button
+                      type="button"
+                      className="text-muted-foreground truncate text-xs mt-0.5 hover:text-primary transition-colors text-left"
+                      onClick={() => setBioTarget({ userId: item.id, name: item.fromName, handle: item.fromHandle, image: item.fromImage })}>
+                      From {item.fromHandle ? '@' + item.fromHandle : item.fromName ?? 'someone'}
+                    </button>
+                  ) : (
+                    <p className="text-muted-foreground truncate text-xs mt-0.5">{item.householdName}</p>
+                  )}
                 </div>
               </div>
               <Badge variant="outline" className="shrink-0 text-[10px] border-border/60">
@@ -2195,14 +2282,22 @@ function HouseholdNotifications({ household, seenNotifIds, onMarkSeen }: {
         {outboundInvites.map((inv) => (
           <div key={inv.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/80 p-3">
             <div className="flex items-center gap-2 min-w-0">
-              {inv.inviteeImage && (
-                <Avatar className="h-7 w-7 shrink-0">
-                  <AvatarImage src={inv.inviteeImage} />
+              <button
+                type="button"
+                className="shrink-0"
+                onClick={() => setBioTarget({ userId: inv.id, name: inv.inviteeName, handle: inv.inviteeHandle, image: inv.inviteeImage })}>
+                <Avatar className="h-7 w-7 hover:ring-2 hover:ring-primary transition-all cursor-pointer">
+                  <AvatarImage src={inv.inviteeImage ?? undefined} />
                   <AvatarFallback className="text-[10px]">{initials(inv.inviteeName, inv.inviteeHandle ?? '?')}</AvatarFallback>
                 </Avatar>
-              )}
+              </button>
               <div className="min-w-0">
-                <p className="text-sm font-medium truncate">Invited {inv.inviteeName ?? inv.inviteeHandle ?? 'User'}</p>
+                <button
+                  type="button"
+                  className="text-sm font-medium truncate hover:text-primary transition-colors text-left"
+                  onClick={() => setBioTarget({ userId: inv.id, name: inv.inviteeName, handle: inv.inviteeHandle, image: inv.inviteeImage })}>
+                  Invited {inv.inviteeName ?? inv.inviteeHandle ?? 'User'}
+                </button>
                 <p className="text-xs text-muted-foreground">To {inv.householdName}</p>
               </div>
             </div>
@@ -2212,6 +2307,23 @@ function HouseholdNotifications({ household, seenNotifIds, onMarkSeen }: {
         </div>
       </TabsContent>
     </Tabs>
+    <UserBioModal
+      target={bioTarget}
+      open={!!bioTarget}
+      onClose={() => setBioTarget(null)}
+      onViewPin={(ownerId, ownerHandle, pin) => {
+        if (!pin.recipeId || !ownerHandle) return;
+        setBioTarget(null);
+        setPinViewTarget({ recipeId: pin.recipeId, recipeTitle: pin.recipeTitle, recipeDescription: pin.recipeDescription, recipeImage: pin.recipeImage, ownerHandle, ownerId, sameHousehold: false });
+      }}
+    />
+    <PublicPinViewModal
+      target={pinViewTarget}
+      meId={meId}
+      open={!!pinViewTarget}
+      onClose={() => setPinViewTarget(null)}
+    />
+    </>
   );
 }
 
@@ -2252,20 +2364,34 @@ function PaginatedItems<T>({ items, renderItem }: { items: T[]; renderItem: (ite
 
 // ─── Share recipe view modal ──────────────────────────────────────────────────
 
-function ShareRecipeViewModal({ share, open, onClose, onCopy }: {
+function ShareRecipeViewModal({ share, open, onClose, onCopy, meId }: {
   share: ShareItem | null; open: boolean; onClose: () => void;
-  onCopy: (s: ShareItem) => void;
+  onCopy: (s: ShareItem, detail: RecipeDetail | null) => void;
+  meId?: string;
 }) {
   const [imgIdx, setImgIdx] = useState(0);
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   const [servings, setServings] = useState(4);
   const [system, setSystem] = useMeasureSystem();
+  const [shareBioTarget, setShareBioTarget] = useState<{ userId: string; name: string | null; handle: string | null; image: string | null } | null>(null);
+  const [pinViewTarget, setPinViewTarget] = useState<PinViewTarget | null>(null);
 
-  const { data: detail, isLoading: detailLoading } = useQuery({
-    queryKey: share?.copiedRecipeId ? queryKeys.recipeBook.recipe(share.copiedRecipeId) : ['share-recipe-detail-none'],
+  const { data: ownDetail, isLoading: ownLoading } = useQuery({
+    queryKey: share?.copiedRecipeId ? queryKeys.recipeBook.recipe(share.copiedRecipeId) : ['share-own-detail-none'],
     queryFn: () => api.get<RecipeDetail>(`/api/recipe-book/recipes/${share!.copiedRecipeId}`),
     enabled: open && !!share?.copiedRecipeId,
   });
+
+  const { data: originalDetail, isLoading: originalLoading } = useQuery({
+    queryKey: share && !share.copiedRecipeId && share.fromUserHandle && share.recipeId
+      ? ['share-original', share.recipeId, share.fromUserHandle]
+      : ['share-original-none'],
+    queryFn: () => api.get<RecipeDetail>(`/api/users/${share!.fromUserHandle}/recipes/${share!.recipeId}`),
+    enabled: open && !!share && !share.copiedRecipeId && !!share.fromUserHandle && !!share.recipeId,
+  });
+
+  const detail = ownDetail ?? originalDetail ?? null;
+  const detailLoading = ownLoading || originalLoading;
 
   useEffect(() => {
     if (open) { setImgIdx(0); setLightboxIdx(null); }
@@ -2284,13 +2410,13 @@ function ShareRecipeViewModal({ share, open, onClose, onCopy }: {
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="w-[calc(100vw-32px)] max-w-sm sm:max-w-md p-0 gap-0 overflow-hidden flex flex-col max-h-[85vh]" hideClose>
+      <DialogContent className="w-[calc(100vw-16px)] max-w-2xl p-0 gap-0 overflow-hidden flex flex-col max-h-[92vh]" hideClose>
         <DialogClose className="absolute right-3 top-3 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-background/90 border border-border/60 shadow-md text-foreground hover:bg-muted transition-colors backdrop-blur-sm">
           <X className="h-4 w-4" /><span className="sr-only">Close</span>
         </DialogClose>
 
         {images.length > 0 && (
-          <div className="relative w-full h-44 shrink-0 bg-muted overflow-hidden">
+          <div className="relative w-full h-48 shrink-0 bg-muted overflow-hidden">
             <img src={images[imgIdx].url} alt={share.recipeTitle ?? ''} className="w-full h-full object-cover" />
             <button type="button" onClick={() => setLightboxIdx(imgIdx)}
               className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-white text-[10px] font-medium hover:bg-black/70 transition-colors z-10">
@@ -2321,7 +2447,7 @@ function ShareRecipeViewModal({ share, open, onClose, onCopy }: {
           <div className="space-y-1">
             <div className="flex items-start justify-between gap-2">
               <h2 className="text-base font-bold leading-tight">{share.recipeTitle ?? 'Untitled Recipe'}</h2>
-              {isInBook && <Badge variant="default" className="text-[10px] shrink-0">In Book</Badge>}
+              {isInBook && <Badge variant="default" className="text-[10px] shrink-0">In Household</Badge>}
             </div>
             {share.recipeDescription && (
               <p className="text-sm text-foreground/75 leading-relaxed">{share.recipeDescription}</p>
@@ -2330,14 +2456,20 @@ function ShareRecipeViewModal({ share, open, onClose, onCopy }: {
           </div>
 
           <div className="flex items-center gap-2">
-            {share.fromUserImage && (
-              <Avatar className="h-6 w-6 shrink-0">
-                <AvatarImage src={share.fromUserImage} />
+            <button type="button" className="shrink-0"
+              onClick={() => setShareBioTarget({ userId: share.fromUserId, name: share.fromUserName, handle: share.fromUserHandle, image: share.fromUserImage })}>
+              <Avatar className="h-6 w-6 hover:ring-2 hover:ring-primary transition-all cursor-pointer">
+                <AvatarImage src={share.fromUserImage ?? undefined} />
                 <AvatarFallback className="text-[10px]">{initials(share.fromUserName, share.fromUserHandle ?? '?')}</AvatarFallback>
               </Avatar>
-            )}
+            </button>
             <p className="text-xs text-muted-foreground">
-              From <span className="font-medium text-foreground">{share.fromUserName ?? share.fromUserHandle ?? 'someone'}</span>
+              From{' '}
+              <button type="button"
+                className="font-medium text-foreground hover:text-primary transition-colors"
+                onClick={() => setShareBioTarget({ userId: share.fromUserId, name: share.fromUserName, handle: share.fromUserHandle, image: share.fromUserImage })}>
+                {share.fromUserName ?? share.fromUserHandle ?? 'someone'}
+              </button>
             </p>
           </div>
 
@@ -2375,9 +2507,11 @@ function ShareRecipeViewModal({ share, open, onClose, onCopy }: {
                 />
               </div>
 
+              <TimeBadges prepTime={detail.prepTime} cookTime={detail.cookTime} />
+
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ingredients</p>
-                <ul className="space-y-1.5">
+                <div className="space-y-1.5">
                   {[...detail.ingredients].sort((a, b) => a.sortOrder - b.sortOrder).map((ing) => {
                     const { qty, unit } = convertQty(
                       scaleQty(ing.quantity, detail.baseServings, servings),
@@ -2385,16 +2519,21 @@ function ShareRecipeViewModal({ share, open, onClose, onCopy }: {
                       system
                     );
                     return (
-                      <li key={ing.id} className="flex items-baseline gap-2 text-sm">
-                        <span className="shrink-0 font-medium tabular-nums">
-                          {qty ? `${qty}${unit ? ` ${unit}` : ''}` : ''}
+                      <div key={ing.id} className="flex gap-2 items-baseline text-sm">
+                        <ChefHat className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0 opacity-70 self-start" />
+                        <span className="flex-1 min-w-0 text-foreground/85">
+                          {qty && (
+                            <span className="font-medium tabular-nums text-foreground/75 text-xs">
+                              {qty}{unit ? ` ${unit}` : ''}{' '}
+                            </span>
+                          )}
+                          {ing.name}
+                          {ing.note && <span className="text-muted-foreground text-xs"> — {ing.note}</span>}
                         </span>
-                        <span className="text-foreground/85">{ing.name}</span>
-                        {ing.note && <span className="text-muted-foreground text-xs">({ing.note})</span>}
-                      </li>
+                      </div>
                     );
                   })}
-                </ul>
+                </div>
               </div>
 
               {detail.steps.length > 0 && (
@@ -2425,7 +2564,7 @@ function ShareRecipeViewModal({ share, open, onClose, onCopy }: {
             </>
           )}
 
-          <Button className="w-full gap-2" size="sm" onClick={() => { onCopy(share); onClose(); }}>
+          <Button className="w-full gap-2" size="sm" onClick={() => { onClose(); onCopy(share, detail ?? null); }}>
             <Copy className="h-3.5 w-3.5" />Save a Copy
           </Button>
         </div>
@@ -2461,6 +2600,231 @@ function ShareRecipeViewModal({ share, open, onClose, onCopy }: {
           </div>
         )}
       </DialogContent>
+      <UserBioModal
+        target={shareBioTarget}
+        open={!!shareBioTarget}
+        onClose={() => setShareBioTarget(null)}
+        onViewPin={(ownerId, ownerHandle, pin) => {
+          if (!pin.recipeId || !ownerHandle) return;
+          setShareBioTarget(null);
+          setPinViewTarget({ recipeId: pin.recipeId, recipeTitle: pin.recipeTitle, recipeDescription: pin.recipeDescription, recipeImage: pin.recipeImage, ownerHandle, ownerId, sameHousehold: false });
+        }}
+      />
+      <PublicPinViewModal
+        target={pinViewTarget}
+        meId={meId ?? ''}
+        open={!!pinViewTarget}
+        onClose={() => setPinViewTarget(null)}
+      />
+    </Dialog>
+  );
+}
+
+// ─── Save a Copy modal ────────────────────────────────────────────────────────
+
+function SaveCopyModal({ shareId, mode, initialTitle, prefill, share, open, onClose }: {
+  shareId: string;
+  mode: 'accept' | 'recopy';
+  initialTitle: string;
+  prefill: RecipeDetail | null;
+  share?: ShareItem | null;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [prepTime, setPrepTime] = useState('');
+  const [cookTime, setCookTime] = useState('');
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const { data: loadedDetail } = useQuery({
+    queryKey: share?.fromUserHandle && share?.recipeId ? ['save-copy-original', share.recipeId, share.fromUserHandle] : ['save-copy-original-none'],
+    queryFn: () => api.get<RecipeDetail>(`/api/users/${share!.fromUserHandle}/recipes/${share!.recipeId}`),
+    enabled: open && !!share && !prefill && !!share.fromUserHandle && !!share.recipeId,
+  });
+
+  const detail = prefill ?? loadedDetail ?? null;
+
+  useEffect(() => {
+    if (open) {
+      setTitle(initialTitle);
+      setDescription(detail?.description ?? '');
+      setPrepTime(detail?.prepTime != null ? String(detail.prepTime) : '');
+      setCookTime(detail?.cookTime != null ? String(detail.cookTime) : '');
+      setImageFile(null);
+      setImagePreview(null);
+    }
+  }, [open, initialTitle]);
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => setImagePreview(ev.target?.result as string ?? null);
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const trimmedTitle = title.trim() || initialTitle;
+      const endpoint = mode === 'accept'
+        ? `/api/shares/${shareId}/accept-with-name`
+        : `/api/shares/${shareId}/recopy-with-name`;
+
+      const result = await api.post<{ copiedRecipeId: string | null }>(endpoint, { title: trimmedTitle });
+      const newId = result.copiedRecipeId;
+      if (!newId) throw new Error('No recipe ID returned');
+
+      const parsedPrep = parseInt(prepTime);
+      const parsedCook = parseInt(cookTime);
+      await api.patch(`/api/recipe-book/recipes/${newId}`, {
+        description: description.trim() || null,
+        prepTime: !isNaN(parsedPrep) && parsedPrep >= 0 ? parsedPrep : null,
+        cookTime: !isNaN(parsedCook) && parsedCook >= 0 ? parsedCook : null,
+      });
+
+      if (imageFile) {
+        const fd = new FormData();
+        fd.append('image', imageFile);
+        await api.postForm(`/api/recipe-book/recipes/${newId}/images`, fd);
+      }
+
+      void queryClient.invalidateQueries({ queryKey: queryKeys.shares.received() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.shares.sent() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.recipeBook.recipes() });
+      toast.success('Recipe added to your book');
+      onClose();
+      void navigate({ to: '/recipes', search: { openRecipeId: newId } });
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to save recipe');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="w-[calc(100vw-16px)] max-w-lg p-0 gap-0 overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="px-5 py-4 border-b shrink-0">
+          <DialogTitle>Save a Copy</DialogTitle>
+          <p className="text-xs text-muted-foreground mt-0.5">Customise this recipe before adding it to your book.</p>
+        </div>
+
+        <div className="flex-1 overflow-y-auto min-h-0 p-5 space-y-4">
+          {/* Photo */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Photo</p>
+            <div
+              className="relative h-36 rounded-xl border-2 border-dashed border-border/60 bg-muted/20 flex items-center justify-center cursor-pointer hover:border-primary/40 hover:bg-muted/40 transition-all overflow-hidden"
+              onClick={() => fileRef.current?.click()}>
+              {imagePreview
+                ? <>
+                    <img src={imagePreview} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                      <span className="text-white text-xs font-medium">Change photo</span>
+                    </div>
+                  </>
+                : <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                    <Camera className="h-8 w-8 opacity-40" />
+                    <span className="text-xs">Add a photo</span>
+                  </div>
+              }
+            </div>
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
+          </div>
+
+          {/* Title */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Title</label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={255} className="h-9" />
+          </div>
+
+          {/* Description */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Description</label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              className="resize-none text-sm"
+              maxLength={1000}
+              placeholder="Optional description…"
+            />
+          </div>
+
+          {/* Prep & Cook Time */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Prep Time (mins)</label>
+              <Input className="h-9" type="number" min="0" placeholder="e.g. 15" value={prepTime}
+                onChange={(e) => setPrepTime(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cook Time (mins)</label>
+              <Input className="h-9" type="number" min="0" placeholder="e.g. 30" value={cookTime}
+                onChange={(e) => setCookTime(e.target.value)} />
+            </div>
+          </div>
+
+          {detail && detail.ingredients.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ingredients</p>
+              <div className="rounded-xl border bg-muted/20 px-3 py-2.5 space-y-1.5">
+                {[...detail.ingredients].sort((a, b) => a.sortOrder - b.sortOrder).map((ing) => (
+                  <div key={ing.id} className="flex gap-2 items-baseline text-sm">
+                    <ChefHat className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0 opacity-70 self-start" />
+                    <span className="flex-1 min-w-0">
+                      {ing.quantity != null && (
+                        <span className="font-medium tabular-nums text-foreground/75 text-xs">
+                          {ing.quantity}{ing.unit ? ` ${ing.unit}` : ''}{' '}
+                        </span>
+                      )}
+                      {ing.name}
+                      {ing.note && <span className="text-muted-foreground text-xs"> — {ing.note}</span>}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {detail && detail.steps.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Steps</p>
+              <ol className="space-y-2">
+                {detail.steps.map((step, i) => (
+                  <li key={i} className="flex gap-3 text-sm">
+                    <span className="shrink-0 flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-[10px] font-bold mt-0.5">{i + 1}</span>
+                    <p className="text-foreground/85 leading-relaxed flex-1">{step.text}</p>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Ingredients and steps above are shown for reference — all will be copied as-is. You can edit them in My Recipes after saving.
+          </p>
+        </div>
+
+        <div className="shrink-0 px-5 py-3 border-t flex gap-2">
+          <Button variant="outline" className="flex-1" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button className="flex-1 gap-1.5" onClick={handleSave} disabled={saving || !title.trim()}>
+            {saving
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              : <Copy className="h-3.5 w-3.5" />}
+            Save Recipe
+          </Button>
+        </div>
+      </DialogContent>
     </Dialog>
   );
 }
@@ -2471,10 +2835,17 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
   seenNotifIds: Set<string>;
   onMarkSeen: (ids: string[]) => void;
 }) {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [renameShare, setRenameShare] = useState<{ id: string; title: string; mode: 'accept' | 'recopy' } | null>(null);
-  const [customTitle, setCustomTitle] = useState('');
   const [viewShare, setViewShare] = useState<ShareItem | null>(null);
+  const [saveCopyShare, setSaveCopyShare] = useState<{ id: string; title: string; mode: 'accept' | 'recopy'; detail: RecipeDetail | null; share: ShareItem | null } | null>(null);
+  const [bioTarget, setBioTarget] = useState<{ userId: string; name: string | null; handle: string | null; image: string | null } | null>(null);
+  const [pinViewTarget, setPinViewTarget] = useState<PinViewTarget | null>(null);
+
+  const { data: meData } = useQuery({
+    queryKey: queryKeys.users.me(),
+    queryFn: () => api.get<MeData>('/api/users/me'),
+  });
 
   const { data: received = [], isLoading: loadingReceived } = useQuery({
     queryKey: queryKeys.shares.received(),
@@ -2490,15 +2861,6 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
     void queryClient.invalidateQueries({ queryKey: queryKeys.shares.received() });
     void queryClient.invalidateQueries({ queryKey: queryKeys.shares.sent() });
   };
-
-  const acceptMutation = useMutation({
-    mutationFn: ({ id, title }: { id: string; title?: string }) =>
-      title
-        ? api.post(`/api/shares/${id}/accept-with-name`, { title })
-        : api.post(`/api/shares/${id}/accept`),
-    onSuccess: () => { toast.success('Recipe Added To Your Book'); invalidateShares(); setRenameShare(null); },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Failed'),
-  });
 
   const rejectMutation = useMutation({
     mutationFn: (id: string) => api.post(`/api/shares/${id}/reject`),
@@ -2518,31 +2880,14 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
     onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Failed'),
   });
 
-  const recopyMutation = useMutation({
-    mutationFn: ({ id, title }: { id: string; title?: string }) =>
-      title
-        ? api.post(`/api/shares/${id}/recopy-with-name`, { title })
-        : api.post(`/api/shares/${id}/recopy`),
-    onSuccess: () => { toast.success('Recipe Re-Added To Your Book'); invalidateShares(); setRenameShare(null); },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Failed'),
-  });
-
   const cancelRequestMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/api/shares/${id}/cancel-request`),
     onSuccess: () => { toast.success('Request Cancelled'); invalidateShares(); },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Failed'),
   });
 
-  const openRename = (s: ShareItem, mode: 'accept' | 'recopy') => {
-    setCustomTitle(s.recipeTitle ?? '');
-    setRenameShare({ id: s.id, title: s.recipeTitle ?? '', mode });
-  };
-
-  const confirmRename = () => {
-    if (!renameShare) return;
-    const title = customTitle.trim() || undefined;
-    if (renameShare.mode === 'accept') acceptMutation.mutate({ id: renameShare.id, title });
-    else recopyMutation.mutate({ id: renameShare.id, title });
+  const openSaveCopy = (s: ShareItem, mode: 'accept' | 'recopy', detail?: RecipeDetail | null) => {
+    setSaveCopyShare({ id: s.id, title: s.recipeTitle ?? '', mode, detail: detail ?? null, share: s });
   };
 
   const pendingShares = received.filter((s) => s.status === 'PENDING');
@@ -2556,31 +2901,21 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
 
   return (
     <>
-      {/* Rename / custom title modal */}
-      <Dialog open={!!renameShare} onOpenChange={(o) => !o && setRenameShare(null)}>
-        <DialogContent className="w-[calc(100vw-32px)] max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{renameShare?.mode === 'accept' ? 'Add To Recipe Book' : 'Re-Add To Recipe Book'}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <p className="text-xs text-muted-foreground">Give this recipe a custom name, or keep the original.</p>
-            <Input
-              value={customTitle}
-              onChange={(e) => setCustomTitle(e.target.value)}
-              placeholder={renameShare?.title ?? 'Recipe name…'}
-              maxLength={255}
-            />
-            <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={() => setRenameShare(null)}>Cancel</Button>
-              <Button className="flex-1"
-                disabled={acceptMutation.isPending || recopyMutation.isPending}
-                onClick={confirmRename}>
-                {acceptMutation.isPending || recopyMutation.isPending ? 'Saving…' : 'Add To Book'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <SaveCopyModal
+        shareId={saveCopyShare?.id ?? ''}
+        mode={saveCopyShare?.mode ?? 'accept'}
+        initialTitle={saveCopyShare?.title ?? ''}
+        prefill={saveCopyShare?.detail ?? null}
+        share={saveCopyShare?.share ?? null}
+        open={!!saveCopyShare}
+        onClose={() => setSaveCopyShare(null)}
+      />
+      <PublicPinViewModal
+        target={pinViewTarget}
+        meId={meData?.id ?? ''}
+        open={!!pinViewTarget}
+        onClose={() => setPinViewTarget(null)}
+      />
 
       <Tabs defaultValue="inbound">
         <TabsList className="w-full h-8 mb-4 rounded-lg bg-muted/40 border border-border/50 p-0.5">
@@ -2614,15 +2949,20 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
               {recipeRequests.map((s) => (
                 <div key={s.id} className="rounded-xl border border-border/60 bg-card/80 p-3 space-y-2.5">
                   <div className="flex items-center gap-2 min-w-0">
-                    {s.fromUserImage && (
-                      <Avatar className="h-7 w-7 shrink-0">
-                        <AvatarImage src={s.fromUserImage} />
+                    <button type="button" className="shrink-0"
+                      onClick={() => setBioTarget({ userId: s.fromUserId, name: s.fromUserName, handle: s.fromUserHandle, image: s.fromUserImage })}>
+                      <Avatar className="h-7 w-7 hover:ring-2 hover:ring-primary transition-all cursor-pointer">
+                        <AvatarImage src={s.fromUserImage ?? undefined} />
                         <AvatarFallback className="text-[10px]">{initials(s.fromUserName, s.fromUserHandle ?? '?')}</AvatarFallback>
                       </Avatar>
-                    )}
+                    </button>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium truncate">
-                        <span className="font-semibold">{s.fromUserName ?? s.fromUserHandle ?? 'Someone'}</span> wants{' '}
+                        <button type="button"
+                          className="font-semibold hover:text-primary transition-colors"
+                          onClick={() => setBioTarget({ userId: s.fromUserId, name: s.fromUserName, handle: s.fromUserHandle, image: s.fromUserImage })}>
+                          {s.fromUserName ?? s.fromUserHandle ?? 'Someone'}
+                        </button>{' '}wants{' '}
                         <span className="font-semibold">{s.recipeTitle ?? 'a recipe'}</span>
                       </p>
                     </div>
@@ -2653,19 +2993,24 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
               {pendingShares.map((s) => (
                 <div key={s.id} className="rounded-xl border border-border/60 bg-card/80 p-3 space-y-2.5">
                   <div className="flex items-center gap-2 min-w-0">
-                    {s.fromUserImage && (
-                      <Avatar className="h-7 w-7 shrink-0">
-                        <AvatarImage src={s.fromUserImage} />
+                    <button type="button" className="shrink-0"
+                      onClick={() => setBioTarget({ userId: s.fromUserId, name: s.fromUserName, handle: s.fromUserHandle, image: s.fromUserImage })}>
+                      <Avatar className="h-7 w-7 hover:ring-2 hover:ring-primary transition-all cursor-pointer">
+                        <AvatarImage src={s.fromUserImage ?? undefined} />
                         <AvatarFallback className="text-[10px]">{initials(s.fromUserName, s.fromUserHandle ?? '?')}</AvatarFallback>
                       </Avatar>
-                    )}
+                    </button>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium truncate">{s.recipeTitle ?? 'Untitled Recipe'}</p>
-                      <p className="text-xs text-muted-foreground">From {s.fromUserName ?? 'someone'}</p>
+                      <button type="button"
+                        className="text-xs text-muted-foreground hover:text-primary transition-colors text-left"
+                        onClick={() => setBioTarget({ userId: s.fromUserId, name: s.fromUserName, handle: s.fromUserHandle, image: s.fromUserImage })}>
+                        From {s.fromUserName ?? 'someone'}
+                      </button>
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <Button size="sm" className="flex-1 h-8" onClick={() => openRename(s, 'accept')} disabled={acceptMutation.isPending}>
+                    <Button size="sm" className="flex-1 h-8" onClick={() => openSaveCopy(s, 'accept')}>
                       Add To My Book
                     </Button>
                     <Button size="sm" variant="outline" className="flex-1 h-8 border-border/60" onClick={() => rejectMutation.mutate(s.id)} disabled={rejectMutation.isPending}>Decline</Button>
@@ -2682,32 +3027,53 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
                 <PaginatedItems
                   items={pastReceived}
                   renderItem={(s) => (
-                    <div key={s.id} className="rounded-2xl border bg-card overflow-hidden flex flex-col cursor-pointer" onClick={() => setViewShare(s)}>
-                      <div className="flex items-center gap-3 px-3 pt-3 pb-2">
-                        <Avatar className="h-9 w-9 shrink-0 ring-2 ring-border">
-                          <AvatarImage src={s.fromUserImage ?? undefined} />
-                          <AvatarFallback className="text-xs font-semibold">{initials(s.fromUserName, s.fromUserHandle ?? '?')}</AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold truncate">{s.fromUserName ?? 'Unknown'}</p>
-                          {s.fromUserHandle && <p className="text-xs text-muted-foreground">@{s.fromUserHandle}</p>}
-                        </div>
-                        {s.status === 'ACCEPTED' && s.copiedRecipeId
-                          ? <Badge variant="default" className="text-[10px] shrink-0">In Book</Badge>
-                          : <Badge variant="outline" className="text-[10px] border-border/60 shrink-0">{s.status}</Badge>
-                        }
-                      </div>
-                      <div className="mx-3 mb-3 rounded-xl border bg-background/60 overflow-hidden">
-                        {s.recipeImage && <img src={s.recipeImage} alt={s.recipeTitle ?? ''} className="w-full h-36 object-cover" />}
-                        <div className="flex items-center gap-2 px-3 py-2.5">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-semibold truncate">{s.recipeTitle ?? 'Untitled'}</p>
-                            {s.recipeDescription && <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{s.recipeDescription}</p>}
-                            <RecipeMetaLine source={s.recipeSource} className="mt-0.5" />
+                    <div key={s.id} className="rounded-2xl border bg-card overflow-hidden">
+                      {/* Recipe image — matches My Recipes card height */}
+                      {s.recipeImage
+                        ? <div className="h-36 bg-muted overflow-hidden">
+                            <img src={s.recipeImage} alt={s.recipeTitle ?? ''} className="w-full h-full object-cover" />
                           </div>
-                          <button type="button" onClick={(e) => { e.stopPropagation(); setViewShare(s); }}
-                            className="flex items-center gap-1 text-[11px] font-medium rounded-full border border-border/60 px-2.5 py-1 hover:bg-accent transition-colors text-muted-foreground hover:text-foreground shrink-0">
-                            <BookOpen className="h-3 w-3" />View
+                        : <div className="h-28 bg-muted flex items-center justify-center">
+                            <UtensilsCrossed className="h-8 w-8 text-muted-foreground/25" />
+                          </div>
+                      }
+                      <div className="p-3 space-y-2">
+                        {/* Title + sharer */}
+                        <div>
+                          <p className="font-semibold text-sm leading-tight">{s.recipeTitle ?? 'Untitled'}</p>
+                          {s.recipeDescription && (
+                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">{s.recipeDescription}</p>
+                          )}
+                        </div>
+                        {/* Shared by row */}
+                        <div className="flex items-center gap-2">
+                          <Avatar className="h-5 w-5 shrink-0">
+                            <AvatarImage src={s.fromUserImage ?? undefined} />
+                            <AvatarFallback className="text-[9px]">{initials(s.fromUserName, s.fromUserHandle ?? '?')}</AvatarFallback>
+                          </Avatar>
+                          <p className="text-xs text-muted-foreground truncate">
+                            Shared by <span className="font-medium text-foreground">{s.fromUserName ?? s.fromUserHandle ?? 'someone'}</span>
+                          </p>
+                        </div>
+                        {/* Buttons row */}
+                        <div className="flex items-center gap-2 pt-0.5">
+                          {s.status === 'ACCEPTED' && s.copiedRecipeId ? (
+                            <button
+                              type="button"
+                              onClick={() => void navigate({ to: '/recipes', search: { openRecipeId: s.copiedRecipeId! } })}
+                              className="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors">
+                              <BookOpen className="h-3.5 w-3.5" />In Household
+                            </button>
+                          ) : (
+                            <span className="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg border border-border/60 text-xs text-muted-foreground">
+                              {s.status === 'REJECTED' ? 'Declined' : s.status}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setViewShare(s)}
+                            className="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg border border-border bg-card text-xs font-medium hover:bg-accent transition-colors">
+                            <Eye className="h-3.5 w-3.5" />View
                           </button>
                         </div>
                       </div>
@@ -2734,15 +3100,24 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
               {pendingRequests.map((s) => (
                 <div key={s.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/80 px-3 py-2.5">
                   <div className="flex items-center gap-2 min-w-0">
-                    {s.toUserImage && (
-                      <Avatar className="h-7 w-7 shrink-0">
-                        <AvatarImage src={s.toUserImage} />
+                    <button type="button"
+                      className="shrink-0"
+                      onClick={() => setBioTarget({ userId: s.toUserId, name: s.toUserName, handle: s.toUserHandle, image: s.toUserImage })}>
+                      <Avatar className="h-7 w-7 hover:ring-2 hover:ring-primary transition-all">
+                        <AvatarImage src={s.toUserImage ?? undefined} />
                         <AvatarFallback className="text-[10px]">{initials(s.toUserName, s.toUserHandle ?? '?')}</AvatarFallback>
                       </Avatar>
-                    )}
+                    </button>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{s.recipeTitle ?? 'Untitled'}</p>
-                      <p className="text-xs text-muted-foreground">Requested from {s.toUserName ?? 'someone'}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Requested from{' '}
+                        <button type="button"
+                          className="font-medium text-foreground hover:text-primary transition-colors"
+                          onClick={() => setBioTarget({ userId: s.toUserId, name: s.toUserName, handle: s.toUserHandle, image: s.toUserImage })}>
+                          {s.toUserName ?? s.toUserHandle ?? 'someone'}
+                        </button>
+                      </p>
                     </div>
                   </div>
                   <Button size="sm" variant="outline"
@@ -2766,15 +3141,24 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
               {pendingSentOther.map((s) => (
                 <div key={s.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/80 px-3 py-2.5">
                   <div className="flex items-center gap-2 min-w-0">
-                    {s.toUserImage && (
-                      <Avatar className="h-7 w-7 shrink-0">
-                        <AvatarImage src={s.toUserImage} />
+                    <button type="button"
+                      className="shrink-0"
+                      onClick={() => setBioTarget({ userId: s.toUserId, name: s.toUserName, handle: s.toUserHandle, image: s.toUserImage })}>
+                      <Avatar className="h-7 w-7 hover:ring-2 hover:ring-primary transition-all">
+                        <AvatarImage src={s.toUserImage ?? undefined} />
                         <AvatarFallback className="text-[10px]">{initials(s.toUserName, s.toUserHandle ?? '?')}</AvatarFallback>
                       </Avatar>
-                    )}
+                    </button>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{s.recipeTitle ?? 'Untitled'}</p>
-                      <p className="text-xs text-muted-foreground">Shared with {s.toUserName ?? 'someone'}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Shared with{' '}
+                        <button type="button"
+                          className="font-medium text-foreground hover:text-primary transition-colors"
+                          onClick={() => setBioTarget({ userId: s.toUserId, name: s.toUserName, handle: s.toUserHandle, image: s.toUserImage })}>
+                          {s.toUserName ?? s.toUserHandle ?? 'someone'}
+                        </button>
+                      </p>
                     </div>
                   </div>
                   <Badge variant="outline" className="text-[10px] shrink-0 border-border/60">Pending</Badge>
@@ -2790,30 +3174,50 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
                 <PaginatedItems
                   items={pastSent}
                   renderItem={(s) => (
-                    <div key={s.id} className="rounded-2xl border bg-card overflow-hidden flex flex-col cursor-pointer" onClick={() => setViewShare({ ...s, fromUserId: s.toUserId, fromUserName: s.toUserName, fromUserHandle: s.toUserHandle, fromUserImage: s.toUserImage } as ShareItem)}>
-                      <div className="flex items-center gap-3 px-3 pt-3 pb-2">
-                        <Avatar className="h-9 w-9 shrink-0 ring-2 ring-border">
-                          <AvatarImage src={s.toUserImage ?? undefined} />
-                          <AvatarFallback className="text-xs font-semibold">{initials(s.toUserName, s.toUserHandle ?? '?')}</AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold truncate">{s.toUserName ?? 'Unknown'}</p>
-                          {s.toUserHandle && <p className="text-xs text-muted-foreground">@{s.toUserHandle}</p>}
-                        </div>
-                        <Badge variant={s.status === 'ACCEPTED' ? 'default' : 'outline'} className="text-[10px] shrink-0 border-border/60">
-                          {s.status === 'ACCEPTED' ? 'In Their Book' : s.status}
-                        </Badge>
-                      </div>
-                      <div className="mx-3 mb-3 rounded-xl border bg-background/60 overflow-hidden">
-                        {s.recipeImage && <img src={s.recipeImage} alt={s.recipeTitle ?? ''} className="w-full h-36 object-cover" />}
-                        <div className="flex items-center gap-2 px-3 py-2.5">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-semibold truncate">{s.recipeTitle ?? 'Untitled'}</p>
-                            {s.recipeDescription && <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{s.recipeDescription}</p>}
+                    <div key={s.id} className="rounded-2xl border bg-card overflow-hidden">
+                      {s.recipeImage
+                        ? <div className="h-36 bg-muted overflow-hidden">
+                            <img src={s.recipeImage} alt={s.recipeTitle ?? ''} className="w-full h-full object-cover" />
                           </div>
-                          <button type="button" onClick={(e) => { e.stopPropagation(); setViewShare({ ...s, fromUserId: s.toUserId, fromUserName: s.toUserName, fromUserHandle: s.toUserHandle, fromUserImage: s.toUserImage } as ShareItem); }}
-                            className="flex items-center gap-1 text-[11px] font-medium rounded-full border border-border/60 px-2.5 py-1 hover:bg-accent transition-colors text-muted-foreground hover:text-foreground shrink-0">
-                            <BookOpen className="h-3 w-3" />View
+                        : <div className="h-28 bg-muted flex items-center justify-center">
+                            <UtensilsCrossed className="h-8 w-8 text-muted-foreground/25" />
+                          </div>
+                      }
+                      <div className="p-3 space-y-2">
+                        <div>
+                          <p className="font-semibold text-sm leading-tight">{s.recipeTitle ?? 'Untitled'}</p>
+                          {s.recipeDescription && (
+                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">{s.recipeDescription}</p>
+                          )}
+                        </div>
+                        {/* Shared with row */}
+                        <div className="flex items-center gap-2">
+                          <button type="button"
+                            className="shrink-0"
+                            onClick={() => setBioTarget({ userId: s.toUserId, name: s.toUserName, handle: s.toUserHandle, image: s.toUserImage })}>
+                            <Avatar className="h-5 w-5 hover:ring-2 hover:ring-primary transition-all">
+                              <AvatarImage src={s.toUserImage ?? undefined} />
+                              <AvatarFallback className="text-[9px]">{initials(s.toUserName, s.toUserHandle ?? '?')}</AvatarFallback>
+                            </Avatar>
+                          </button>
+                          <p className="text-xs text-muted-foreground truncate flex-1">
+                            Shared with{' '}
+                            <button type="button"
+                              className="font-medium text-foreground hover:text-primary transition-colors"
+                              onClick={() => setBioTarget({ userId: s.toUserId, name: s.toUserName, handle: s.toUserHandle, image: s.toUserImage })}>
+                              {s.toUserName ?? s.toUserHandle ?? 'someone'}
+                            </button>
+                          </p>
+                        </div>
+                        {/* Buttons */}
+                        <div className="flex items-center gap-2 pt-0.5">
+                          <span className={`flex-1 flex items-center justify-center h-8 rounded-lg text-xs font-medium ${s.status === 'ACCEPTED' ? 'bg-primary/10 text-primary' : 'border border-border/60 text-muted-foreground'}`}>
+                            {s.status === 'ACCEPTED' ? 'In Their Book' : s.status}
+                          </span>
+                          <button type="button"
+                            onClick={() => setViewShare({ ...s, fromUserId: s.toUserId, fromUserName: s.toUserName, fromUserHandle: s.toUserHandle, fromUserImage: s.toUserImage } as ShareItem)}
+                            className="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg border border-border bg-card text-xs font-medium hover:bg-accent transition-colors">
+                            <Eye className="h-3.5 w-3.5" />View
                           </button>
                         </div>
                       </div>
@@ -2830,7 +3234,18 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
         share={viewShare}
         open={!!viewShare}
         onClose={() => setViewShare(null)}
-        onCopy={(s) => openRename(s, 'recopy')}
+        onCopy={(s, d) => openSaveCopy(s, 'recopy', d)}
+        meId={meData?.id ?? ''}
+      />
+      <UserBioModal
+        target={bioTarget}
+        open={!!bioTarget}
+        onClose={() => setBioTarget(null)}
+        onViewPin={(ownerId, ownerHandle, pin) => {
+          if (!pin.recipeId || !ownerHandle) return;
+          setBioTarget(null);
+          setPinViewTarget({ recipeId: pin.recipeId, recipeTitle: pin.recipeTitle, recipeDescription: pin.recipeDescription, recipeImage: pin.recipeImage, ownerHandle, ownerId, sameHousehold: false });
+        }}
       />
     </>
   );

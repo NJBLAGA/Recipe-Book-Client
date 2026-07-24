@@ -5,7 +5,7 @@ import {
   Search, Users, BookOpen, UserPlus, UserMinus,
   Send, UtensilsCrossed, Lock, Plus, ChevronRight, ChevronDown,
   Trash2, Star, ChevronLeft, LayoutList, X, Scale, ChefHat, MessageSquare, Eye, Pencil,
-  SlidersHorizontal, TrendingUp, Maximize2,
+  SlidersHorizontal, TrendingUp, Maximize2, Clock,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, ApiError } from '@/lib/api';
@@ -46,7 +46,7 @@ interface CommunityPost {
   id: string; comment: string; createdAt: string;
   userId: string; userName: string | null; userHandle: string | null; userImage: string | null;
   recipeId: string | null; recipeTitle: string | null; recipeDescription: string | null;
-  recipeSource: string | null;
+  recipeSource: string | null; recipePrepTime: number | null; recipeCookTime: number | null;
   recipeImages: string[]; isFollowing: boolean; isOwnPost: boolean;
   reviewCount: number; recipeAvgRating: number | null; sameHousehold: boolean;
 }
@@ -67,7 +67,8 @@ interface RecipeStep {
 
 interface RecipeDetail {
   id: string; title: string; description: string | null; source: string | null;
-  baseServings: number; steps: RecipeStep[]; categoryName: string | null;
+  baseServings: number; prepTime: number | null; cookTime: number | null;
+  steps: RecipeStep[]; categoryName: string | null;
   ingredients: RecipeIngredient[];
   images: { url: string; sortOrder: number }[];
 }
@@ -90,6 +91,21 @@ interface PublicProfile {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatTime(mins: number | null | undefined): string | null {
+  if (mins == null || mins <= 0) return null;
+  return `${mins} min`;
+}
+function TimeBadges({ prepTime, cookTime }: { prepTime?: number | null; cookTime?: number | null }) {
+  const prep = formatTime(prepTime); const cook = formatTime(cookTime);
+  if (!prep && !cook) return null;
+  return (
+    <div className="flex items-center gap-4 flex-wrap">
+      {prep && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="h-3.5 w-3.5 text-primary shrink-0" /><span className="font-medium text-foreground">Prep:</span>{prep}</span>}
+      {cook && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="h-3.5 w-3.5 text-amber-500 shrink-0" /><span className="font-medium text-foreground">Cook:</span>{cook}</span>}
+    </div>
+  );
+}
 
 function initials(name: string | null, fallback: string) {
   if (!name) return fallback[0]?.toUpperCase() ?? '?';
@@ -493,6 +509,7 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
             </div>
             {detail.description && <p className="text-sm text-foreground/80 leading-relaxed">{detail.description}</p>}
             <RecipeMetaLine categoryName={detail.categoryName} source={detail.source} />
+            <TimeBadges prepTime={detail.prepTime} cookTime={detail.cookTime} />
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
@@ -630,7 +647,7 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
                 </button>
               </>
             )}
-            <img src={images[lightboxIdx].url} alt="" className="max-h-[80%] max-w-[85%] object-contain rounded-xl shadow-2xl" onClick={(e) => e.stopPropagation()} />
+            <img src={images[lightboxIdx].url} alt="" className="max-h-[45vh] max-w-[calc(100%-120px)] object-contain rounded-xl shadow-2xl" onClick={(e) => e.stopPropagation()} />
             {images.length > 1 && (
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
                 {images.map((_, i) => (
@@ -994,6 +1011,7 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
             {avgRating !== null && <StarDisplay rating={avgRating} count={reviews.length} />}
             {recipe.description && <p className="text-sm text-foreground/80 leading-relaxed">{recipe.description}</p>}
             <RecipeMetaLine categoryName={recipe.categoryName} source={recipe.source} />
+            <TimeBadges prepTime={recipe.prepTime} cookTime={recipe.cookTime} />
             {/* Serving slider */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
@@ -1152,7 +1170,7 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
                 </button>
               </>
             )}
-            <img src={images[lightboxIdx].url} alt="" className="max-h-[80%] max-w-[85%] object-contain rounded-xl shadow-2xl" onClick={(e) => e.stopPropagation()} />
+            <img src={images[lightboxIdx].url} alt="" className="max-h-[45vh] max-w-[calc(100%-120px)] object-contain rounded-xl shadow-2xl" onClick={(e) => e.stopPropagation()} />
             {images.length > 1 && (
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
                 {images.map((_, i) => (
@@ -1187,6 +1205,7 @@ function CreatePostModal({ open, onClose }: { open: boolean; onClose: () => void
   const [step, setStep] = useState<'recipe' | 'preview' | 'comment'>('recipe');
   const [previewServings, setPreviewServings] = useState(4);
   const [previewSystem, setPreviewSystem] = useMeasureSystem();
+  const [previewImgIdx, setPreviewImgIdx] = useState(0);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const { data: recipes = [], isLoading: recipesLoading } = useQuery({
@@ -1214,7 +1233,7 @@ function CreatePostModal({ open, onClose }: { open: boolean; onClose: () => void
 
   const handleClose = () => {
     setSelectedRecipe(null); setPreviewRecipe(null); setComment(''); setSearch('');
-    setDebouncedSearch(''); setStep('recipe'); onClose();
+    setDebouncedSearch(''); setStep('recipe'); setPreviewImgIdx(0); onClose();
   };
 
   const handleSearch = (val: string) => {
@@ -1256,7 +1275,7 @@ function CreatePostModal({ open, onClose }: { open: boolean; onClose: () => void
               {debouncedSearch.length >= 1 && !recipesLoading && recipes.length === 0 && <p className="text-xs text-muted-foreground py-4 text-center">No recipes match that search.</p>}
               {debouncedSearch.length >= 1 && recipes.map((r) => (
                 <button key={r.id} type="button"
-                  onClick={() => { setPreviewRecipe(r); setPreviewServings(4); setStep('preview'); }}
+                  onClick={() => { setPreviewRecipe(r); setPreviewServings(4); setPreviewImgIdx(0); setStep('preview'); }}
                   className="w-full text-left rounded-lg border px-2.5 py-2 hover:bg-accent transition-colors flex items-center gap-2.5">
                   {r.image
                     ? <img src={r.image} alt={r.title} className="h-9 w-9 rounded-md object-cover shrink-0" />
@@ -1272,14 +1291,36 @@ function CreatePostModal({ open, onClose }: { open: boolean; onClose: () => void
           </div>
         )}
 
-        {step === 'preview' && previewRecipe && (
+        {step === 'preview' && previewRecipe && (() => {
+          const previewImages = previewDetail?.images?.length
+            ? [...previewDetail.images].sort((a, b) => a.sortOrder - b.sortOrder)
+            : previewRecipe.image ? [{ url: previewRecipe.image, sortOrder: 0 }] : [];
+          return (
           <>
-            {previewRecipe.image && (
-              <div className="shrink-0 bg-muted">
-                <img src={previewRecipe.image} alt={previewRecipe.title} className="w-full h-40 object-cover" />
+            {previewImages.length > 0 && (
+              <div className="relative shrink-0 bg-muted">
+                <img src={previewImages[previewImgIdx]?.url} alt={previewRecipe.title} className="w-full h-40 object-cover" />
+                {previewImages.length > 1 && (
+                  <>
+                    <button type="button" onClick={() => setPreviewImgIdx((i) => (i - 1 + previewImages.length) % previewImages.length)}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-background/80 border flex items-center justify-center shadow">
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <button type="button" onClick={() => setPreviewImgIdx((i) => (i + 1) % previewImages.length)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-background/80 border flex items-center justify-center shadow">
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+                      {previewImages.map((_, i) => (
+                        <button key={i} type="button" onClick={() => setPreviewImgIdx(i)}
+                          className={cn('h-1.5 rounded-full transition-all', i === previewImgIdx ? 'w-4 bg-primary' : 'w-1.5 bg-primary/30')} />
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             )}
-            <div className="scrollbar-hide overflow-y-auto flex-1 px-4 py-4 space-y-4">
+            <div className={cn('scrollbar-hide overflow-y-auto flex-1 px-4 pb-4 space-y-4', previewImages.length === 0 ? 'pt-12' : 'pt-4')}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <h2 className="text-base font-bold leading-tight">{previewDetail?.title ?? previewRecipe.title}</h2>
@@ -1301,7 +1342,8 @@ function CreatePostModal({ open, onClose }: { open: boolean; onClose: () => void
                 <p className="text-sm text-foreground/80 leading-relaxed">{previewDetail?.description ?? previewRecipe.description}</p>
               )}
               <RecipeMetaLine categoryName={previewDetail?.categoryName} source={previewDetail?.source} />
-              {previewLoading && <div className="flex justify-center py-6"><div className="h-5 w-5 animate-spin rounded-full border-2 border-primary/30 border-t-transparent" /></div>}
+              <TimeBadges prepTime={previewDetail?.prepTime} cookTime={previewDetail?.cookTime} />
+              {previewLoading &&<div className="flex justify-center py-6"><div className="h-5 w-5 animate-spin rounded-full border-2 border-primary/30 border-t-transparent" /></div>}
               {previewDetail && (
                 <>
                   <div className="space-y-1.5">
@@ -1355,7 +1397,8 @@ function CreatePostModal({ open, onClose }: { open: boolean; onClose: () => void
               </Button>
             </div>
           </>
-        )}
+          );
+        })()}
 
         {step === 'comment' && selectedRecipe && (
           <div className="space-y-4">
@@ -1403,7 +1446,7 @@ function CommunityPage() {
   return (
     <div className="flex flex-col items-center px-4 pb-24 pt-6">
       <div data-timer-align className="w-full max-w-md sm:max-w-xl lg:w-[65%] lg:max-w-5xl xl:max-w-[1400px]">
-        <div className="mb-1 flex items-center gap-2">
+        <div className="mb-1 flex items-center gap-2" data-tour="community-header">
           <Users className="h-5 w-5 text-primary shrink-0" />
           <h1 className="text-xl font-bold">Community</h1>
         </div>
@@ -1412,7 +1455,7 @@ function CommunityPage() {
         </p>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <div className="rounded-t-2xl border border-b-0 overflow-hidden">
+          <div className="rounded-t-2xl overflow-hidden" data-tour="community-search">
             <TabsList className="w-full h-12 rounded-none bg-card border-b p-0 gap-0">
               {[
                 { value: 'feed', label: 'Community Recipes' },
@@ -1420,13 +1463,14 @@ function CommunityPage() {
                 { value: 'following', label: 'Following' },
               ].map(({ value, label }) => (
                 <TabsTrigger key={value} value={value}
+                  data-tour={value === 'following' ? 'community-user' : undefined}
                   className="flex-1 h-full rounded-none text-[10px] sm:text-xs lg:text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=inactive]:text-muted-foreground px-0.5">
                   {label}
                 </TabsTrigger>
               ))}
             </TabsList>
           </div>
-          <div className="rounded-b-2xl border border-t-0 bg-background overflow-hidden">
+          <div className="rounded-b-2xl bg-background overflow-hidden">
             <TabsContent value="feed" className="mt-0">
               <FeedTab meId={me?.id ?? ''} filterUserId={filterUserId} filterUserName={filterUserName}
                 onClearFilter={() => { setFilterUserId(null); setFilterUserName(null); }} />
@@ -1492,9 +1536,11 @@ function FeedTab({ meId, filterUserId, filterUserName, onClearFilter }: {
   const [sortBy, setSortBy] = useState<SortBy>('recent');
   const [postType, setPostType] = useState<PostType>('all');
   const [minRating, setMinRating] = useState<0 | 3 | 4 | 5>(0);
+  const [maxPrepTime, setMaxPrepTime] = useState<15 | 30 | 60 | null>(null);
+  const [maxCookTime, setMaxCookTime] = useState<15 | 30 | 60 | null>(null);
 
-  const hasActiveFilters = timeMode !== 'all' || sortBy !== 'recent' || postType !== 'all' || minRating > 0;
-  const clearFilters = () => { setTimeMode('all'); setSortBy('recent'); setPostType('all'); setMinRating(0); };
+  const hasActiveFilters = timeMode !== 'all' || sortBy !== 'recent' || postType !== 'all' || minRating > 0 || maxPrepTime != null || maxCookTime != null;
+  const clearFilters = () => { setTimeMode('all'); setSortBy('recent'); setPostType('all'); setMinRating(0); setMaxPrepTime(null); setMaxCookTime(null); };
 
   const currentYear = now.getFullYear();
   const years = useMemo(() => Array.from({ length: currentYear - LAUNCH_YEAR + 1 }, (_, i) => currentYear - i), [currentYear]);
@@ -1510,7 +1556,7 @@ function FeedTab({ meId, filterUserId, filterUserName, onClearFilter }: {
     return { apiFrom: `${selYear}-${mm}-${dd}T00:00:00Z`, apiTo: `${selYear}-${mm}-${dd}T23:59:59Z` };
   }, [timeMode, selYear, selMonth, selDay]);
 
-  useEffect(() => { setPage(0); }, [filterUserId, apiFrom, apiTo, sortBy, postType, minRating, feedSearch]);
+  useEffect(() => { setPage(0); }, [filterUserId, apiFrom, apiTo, sortBy, postType, minRating, maxPrepTime, maxCookTime, feedSearch]);
 
   const { data: posts = [], isLoading } = useQuery({
     queryKey: queryKeys.community.posts(filterUserId ?? undefined, apiFrom, apiTo),
@@ -1533,6 +1579,16 @@ function FeedTab({ meId, filterUserId, filterUserName, onClearFilter }: {
 
     if (minRating > 0) result = result.filter((p) => p.recipeAvgRating !== null && p.recipeAvgRating >= minRating);
 
+    if (maxPrepTime != null) {
+      if (maxPrepTime === 60) result = result.filter((p) => p.recipePrepTime != null && p.recipePrepTime >= 60);
+      else result = result.filter((p) => p.recipePrepTime != null && p.recipePrepTime <= maxPrepTime);
+    }
+
+    if (maxCookTime != null) {
+      if (maxCookTime === 60) result = result.filter((p) => p.recipeCookTime != null && p.recipeCookTime >= 60);
+      else result = result.filter((p) => p.recipeCookTime != null && p.recipeCookTime <= maxCookTime);
+    }
+
     if (sortBy === 'unreviewed') result = result.filter((p) => p.recipeId !== null && p.reviewCount === 0);
 
     switch (sortBy) {
@@ -1542,7 +1598,7 @@ function FeedTab({ meId, filterUserId, filterUserName, onClearFilter }: {
       case 'az': return [...result].sort((a, b) => (a.recipeTitle ?? '').localeCompare(b.recipeTitle ?? ''));
       default: return result;
     }
-  }, [posts, feedSearch, postType, minRating, sortBy]);
+  }, [posts, feedSearch, postType, minRating, maxPrepTime, maxCookTime, sortBy]);
 
   const totalPages = Math.ceil(filteredPosts.length / pageSize);
   const clampedPage = Math.min(page, Math.max(0, totalPages - 1));
@@ -1695,6 +1751,48 @@ function FeedTab({ meId, filterUserId, filterUserName, onClearFilter }: {
         </div>
       )}
 
+      {/* PREP TIME */}
+      {postType !== 'no-recipe' && (
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Prep Time</p>
+          <div className="flex flex-wrap gap-1.5">
+            <button type="button" onClick={() => setMaxPrepTime(null)}
+              className={cn('text-[11px] font-medium rounded-full border px-2.5 py-1 transition-colors',
+                maxPrepTime === null ? 'bg-primary text-primary-foreground border-primary' : 'border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/30')}>
+              All
+            </button>
+            {([{ value: 15, label: '15m' }, { value: 30, label: '30m' }, { value: 60, label: '60+' }] as const).map(({ value, label }) => (
+              <button key={value} type="button" onClick={() => setMaxPrepTime(value)}
+                className={cn('text-[11px] font-medium rounded-full border px-2.5 py-1 transition-colors',
+                  maxPrepTime === value ? 'bg-primary text-primary-foreground border-primary' : 'border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/30')}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* COOK TIME */}
+      {postType !== 'no-recipe' && (
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Cook Time</p>
+          <div className="flex flex-wrap gap-1.5">
+            <button type="button" onClick={() => setMaxCookTime(null)}
+              className={cn('text-[11px] font-medium rounded-full border px-2.5 py-1 transition-colors',
+                maxCookTime === null ? 'bg-primary text-primary-foreground border-primary' : 'border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/30')}>
+              All
+            </button>
+            {([{ value: 15, label: '15m' }, { value: 30, label: '30m' }, { value: 60, label: '60+' }] as const).map(({ value, label }) => (
+              <button key={value} type="button" onClick={() => setMaxCookTime(value)}
+                className={cn('text-[11px] font-medium rounded-full border px-2.5 py-1 transition-colors',
+                  maxCookTime === value ? 'bg-primary text-primary-foreground border-primary' : 'border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/30')}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {hasActiveFilters && (
         <button type="button" onClick={clearFilters}
           className="text-[11px] text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2">
@@ -1709,9 +1807,9 @@ function FeedTab({ meId, filterUserId, filterUserName, onClearFilter }: {
 
       {/* Header row — all breakpoints */}
       <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">
-          {filterUserId ? `Posts by ${filterUserName ?? 'user'}` : 'Check out what the community is cooking'}
-        </p>
+        {filterUserId ? (
+          <p className="text-xs text-muted-foreground">Posts by {filterUserName ?? 'user'}</p>
+        ) : <span />}
         <Button size="sm" className="gap-1.5 h-8 text-xs shrink-0" onClick={() => setCreateOpen(true)}>
           <Plus className="h-3.5 w-3.5" />Share A Recipe
         </Button>

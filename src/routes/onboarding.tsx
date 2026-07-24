@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { BookOpenText, Sparkles, Users, Mail, CheckCircle2, XCircle, Search } from 'lucide-react';
+import { BookOpenText, Sparkles, Users, Mail, CheckCircle2, XCircle, Search, Home } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { authClient } from '@/lib/auth';
 import { api, ApiError } from '@/lib/api';
@@ -103,8 +103,8 @@ function OnboardingPage() {
 
   const createMutation = useMutation({
     mutationFn: (name: string) => api.post('/api/households', { name }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.household.mine() });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.household.mine() });
       void navigate({ to: '/recipes' });
     },
     onError: (err) => {
@@ -175,8 +175,23 @@ function OnboardingPage() {
     <div className="flex min-h-svh flex-col items-center justify-start px-4 py-12">
       <div className="w-full max-w-sm space-y-8">
 
+        {/* ── Household explanation ─────────────────── */}
+        <div className="rounded-xl border border-border bg-muted/40 p-4 space-y-2">
+          <div className="flex items-start gap-3">
+            <div className="bg-primary/10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full mt-0.5">
+              <Home className="h-4 w-4 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold text-sm">This app is built around households</p>
+              <p className="text-muted-foreground text-xs mt-1 leading-relaxed">
+                Your recipe book, pantry, and shopping list all belong to a household and are shared with everyone in it. You need to create or join one before you can access any features.
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* ── Header ───────────────────────────────── */}
-        <div className="flex flex-col items-center gap-3">
+        <div className="flex flex-col items-center gap-3" data-tour="onboarding-header">
           <div className="bg-primary text-primary-foreground flex h-12 w-12 items-center justify-center rounded-2xl">
             <BookOpenText className="h-6 w-6" />
           </div>
@@ -189,7 +204,7 @@ function OnboardingPage() {
         </div>
 
         {/* ── Option selector ───────────────────────── */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-3" data-tour="onboarding-join">
           {OPTIONS.map(({ id, icon: Icon, label }) => {
             const isActive = active === id;
             const isDimmed = active !== null && !isActive;
@@ -197,6 +212,7 @@ function OnboardingPage() {
               <button
                 key={id}
                 type="button"
+                data-tour={id === 'create' ? 'onboarding-create' : undefined}
                 onClick={() => setActive(isActive ? null : id)}
                 className={[
                   'flex flex-col items-center gap-2 rounded-xl border p-4 text-center transition-all duration-200',
@@ -246,7 +262,7 @@ function OnboardingPage() {
                   )}
                 />
                 <Button type="submit" className="w-full" disabled={createMutation.isPending}>
-                  {createMutation.isPending ? 'Creating…' : 'Create household'}
+                  {createMutation.isPending ? 'Setting up…' : 'Create household'}
                 </Button>
               </form>
             </Form>
