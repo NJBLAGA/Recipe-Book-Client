@@ -255,7 +255,7 @@ function OnboardingPage() {
                     <FormItem>
                       <FormLabel>Household name</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g. The Blagas" autoComplete="off" {...field} />
+                        <Input placeholder="e.g. The Smiths" autoComplete="off" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
