@@ -119,7 +119,7 @@ describe('queryKeys factory', () => {
         queryKeys.shoppingList.items(),
         queryKeys.shares.received(),
       ];
-      const serialised = keys.map(JSON.stringify);
+      const serialised = keys.map((k) => JSON.stringify(k));
       const unique = new Set(serialised);
       expect(unique.size).toBe(keys.length);
     });

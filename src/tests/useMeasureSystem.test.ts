@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useMeasureSystem, getMeasureDefault, MeasureSystem } from '@/hooks/useMeasureSystem';
+import { useMeasureSystem, getMeasureDefault, type MeasureSystem } from '@/hooks/useMeasureSystem';
 
 describe('getMeasureDefault', () => {
   beforeEach(() => {

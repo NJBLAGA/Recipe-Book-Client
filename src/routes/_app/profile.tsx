@@ -3338,7 +3338,7 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
                             {s.status === 'ACCEPTED' ? 'In Their Book' : s.status}
                           </span>
                           <button type="button"
-                            onClick={() => setViewShare({ ...s, fromUserId: s.toUserId, fromUserName: s.toUserName, fromUserHandle: s.toUserHandle, fromUserImage: s.toUserImage } as ShareItem)}
+                            onClick={() => setViewShare({ ...s, fromUserId: s.toUserId, fromUserName: s.toUserName, fromUserHandle: s.toUserHandle, fromUserImage: s.toUserImage } as unknown as ShareItem)}
                             className="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg border border-border bg-card text-xs font-medium hover:bg-accent transition-colors">
                             <Eye className="h-3.5 w-3.5" />View
                           </button>

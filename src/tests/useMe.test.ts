@@ -8,7 +8,7 @@ vi.mock('@/lib/query', () => ({
   queryClient: new QueryClient(),
 }));
 
-const originalFetch = global.fetch;
+const originalFetch = globalThis.fetch;
 
 function makeWrapper() {
   const client = new QueryClient({
@@ -32,16 +32,16 @@ const mockUser = {
 
 describe('useMe', () => {
   beforeEach(() => {
-    global.fetch = vi.fn();
+    globalThis.fetch = vi.fn();
   });
 
   afterEach(() => {
-    global.fetch = originalFetch;
+    globalThis.fetch = originalFetch;
     vi.restoreAllMocks();
   });
 
   it('returns the user profile on successful 200', async () => {
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
       new Response(JSON.stringify(mockUser), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -57,19 +57,19 @@ describe('useMe', () => {
   });
 
   it('hits /api/users/me', async () => {
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
       new Response(JSON.stringify(mockUser), { status: 200, headers: { 'Content-Type': 'application/json' } })
     );
 
     const { result } = renderHook(() => useMe(), { wrapper: makeWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    const [url] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const [url] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(url).toBe('/api/users/me');
   });
 
   it('exposes isLoading=true while the request is in flight', () => {
-    (global.fetch as ReturnType<typeof vi.fn>).mockReturnValue(new Promise(() => {}));
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockReturnValue(new Promise(() => {}));
 
     const { result } = renderHook(() => useMe(), { wrapper: makeWrapper() });
     expect(result.current.isLoading).toBe(true);
@@ -77,7 +77,7 @@ describe('useMe', () => {
   });
 
   it('exposes isError=true on a failed request', async () => {
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
       new Response(JSON.stringify({ error: 'Unauthorised' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' },
@@ -92,7 +92,7 @@ describe('useMe', () => {
   });
 
   it('returns null theme when user has no theme preference', async () => {
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
       new Response(JSON.stringify({ ...mockUser, theme: null }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },

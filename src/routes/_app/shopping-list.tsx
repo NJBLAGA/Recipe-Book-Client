@@ -648,7 +648,6 @@ function ShoppingListPage() {
   const hasActiveFilters = !!(sortBy !== 'default' || searchQuery.trim());
 
   const handleToggle = (id: string, checked: boolean) => toggleMutation.mutate({ id, isChecked: checked });
-  const handleDelete = (id: string) => deleteMutation.mutate(id);
   const handleMove = (id: string, direction: 'up' | 'down') => moveMutation.mutate({ id, direction });
   const handleView = (item: ShoppingItem) => { setViewItem(item); setViewCarouselIdx(0); };
   const handleEdit = (item: ShoppingItem) => openEdit(item);

@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Search, Users, BookOpen, UserPlus, UserMinus,
   Send, UtensilsCrossed, Lock, Plus, ChevronRight, ChevronDown,
-  Trash2, Star, ChevronLeft, LayoutList, X, Scale, ChefHat, MessageSquare, Eye, Pencil,
+  Trash2, Star, ChevronLeft, LayoutList, X, ChefHat, MessageSquare, Eye, Pencil,
   SlidersHorizontal, TrendingUp, Maximize2, Clock,
 } from 'lucide-react';
 import { toast } from 'sonner';

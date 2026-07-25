@@ -8,7 +8,7 @@ vi.mock('@/lib/query', () => ({
   queryClient: new QueryClient(),
 }));
 
-const originalFetch = global.fetch;
+const originalFetch = globalThis.fetch;
 
 function makeWrapper() {
   const client = new QueryClient({
@@ -20,17 +20,17 @@ function makeWrapper() {
 
 describe('useHousehold', () => {
   beforeEach(() => {
-    global.fetch = vi.fn();
+    globalThis.fetch = vi.fn();
   });
 
   afterEach(() => {
-    global.fetch = originalFetch;
+    globalThis.fetch = originalFetch;
     vi.restoreAllMocks();
   });
 
   it('returns household data on successful 200', async () => {
     const household = { id: 'h-1', name: 'My House', role: 'OWNER' as const };
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
       new Response(JSON.stringify(household), { status: 200, headers: { 'Content-Type': 'application/json' } })
     );
 
@@ -42,7 +42,7 @@ describe('useHousehold', () => {
   });
 
   it('returns null when API returns 404 (no household)', async () => {
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
       new Response(JSON.stringify({ error: 'No household' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' },
@@ -61,11 +61,11 @@ describe('useHousehold', () => {
 
     expect(result.current.isLoading).toBe(false);
     expect(result.current.household).toBeNull();
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
   it('isLoading is true initially while fetching', () => {
-    (global.fetch as ReturnType<typeof vi.fn>).mockReturnValue(new Promise(() => {}));
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockReturnValue(new Promise(() => {}));
 
     const { result } = renderHook(() => useHousehold(), { wrapper: makeWrapper() });
 

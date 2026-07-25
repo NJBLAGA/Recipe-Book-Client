@@ -14,7 +14,6 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
@@ -1289,7 +1288,7 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
   const shopImgRef = useRef<HTMLInputElement>(null);
   const [completing, setCompleting] = useState(false);
   const completingRef = useRef(false);
-  const saveTickRef = useRef<ReturnType<typeof setTimeout>>();
+  const saveTickRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const persistFailRef = useRef(0);
 
   const { data: recipe, isLoading } = useQuery({
