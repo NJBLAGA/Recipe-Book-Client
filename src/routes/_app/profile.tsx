@@ -303,7 +303,7 @@ function ProfilePage() {
 
   return (
     <div className="flex flex-col items-center px-4 pb-24 pt-6">
-      <div data-timer-align className="w-full max-w-md sm:max-w-xl lg:max-w-2xl xl:max-w-3xl">
+      <div data-timer-align className="w-full max-w-md sm:max-w-xl lg:max-w-3xl xl:max-w-5xl">
         <div className="mb-1 flex items-center gap-2" data-tour="profile-card">
           <UserCircle className="h-5 w-5 text-primary shrink-0" />
           <h1 className="text-xl font-bold">My Profile</h1>
@@ -313,7 +313,7 @@ function ProfilePage() {
         </p>
 
         <Tabs defaultValue="settings">
-          <div className="rounded-t-2xl border border-b-0 overflow-hidden">
+          <div className="rounded-t-2xl overflow-hidden">
             <TabsList className="w-full h-12 rounded-none bg-card border-b p-0 gap-0">
               {(['settings', 'household', 'notifications'] as const).map((tab) => (
                 <TabsTrigger key={tab} value={tab}
@@ -323,7 +323,7 @@ function ProfilePage() {
                     <span className="inline-flex items-center gap-1.5">
                       Notifications
                       {notifCount > 0 && (
-                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary text-primary-foreground text-[9px] font-bold px-1 leading-none">
+                        <span className="inline-grid h-4 min-w-4 place-items-center rounded-full bg-primary text-primary-foreground text-[9px] font-bold px-1">
                           {notifCount > 9 ? '9+' : notifCount}
                         </span>
                       )}
@@ -333,7 +333,7 @@ function ProfilePage() {
               ))}
             </TabsList>
           </div>
-          <div className="rounded-b-2xl border border-t-0 bg-background overflow-hidden">
+          <div className="rounded-b-2xl bg-background overflow-hidden">
             <TabsContent value="settings" className="mt-0">
               <SettingsTab me={me as MeData} household={household} />
             </TabsContent>
@@ -1070,6 +1070,7 @@ function PinViewModal({ slot, open, onClose }: { slot: PinSlot; open: boolean; o
             </div>
             {recipe.description && <p className="text-sm text-foreground/80 leading-relaxed">{recipe.description}</p>}
             <RecipeMetaLine categoryName={recipe.categoryName} source={recipe.source} />
+            <TimeBadges prepTime={recipe.prepTime} cookTime={recipe.cookTime} />
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
@@ -1123,7 +1124,7 @@ function PinViewModal({ slot, open, onClose }: { slot: PinSlot; open: boolean; o
                 <div className="space-y-3">
                   {recipe.steps.map((step, i) => (
                     <div key={i} className="flex gap-3 text-sm">
-                      <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-bold leading-none mt-0.5">
+                      <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-bold mt-0.5">
                         {i + 1}
                       </span>
                       <div className="leading-relaxed flex-1">
@@ -1658,6 +1659,7 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
             </div>
             {detail.description && <p className="text-sm text-foreground/80 leading-relaxed">{detail.description}</p>}
             <RecipeMetaLine categoryName={detail.categoryName} source={detail.source} />
+            <TimeBadges prepTime={detail.prepTime} cookTime={detail.cookTime} />
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5"><ChefHat className="h-3.5 w-3.5" />Servings</span>
@@ -1703,7 +1705,7 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
                   <div className="space-y-3">
                     {detail.steps.map((step, i) => (
                       <div key={i} className="flex gap-3 text-sm">
-                        <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-bold leading-none mt-0.5">{i + 1}</span>
+                        <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-bold mt-0.5">{i + 1}</span>
                         <div className="leading-relaxed flex-1">
                           <p>{convertStepText(step.text, system)}</p>
                           {step.subSteps.length > 0 && (
@@ -2072,7 +2074,7 @@ function PinCard({ pin, onView, onRequest, requesting }: {
 }) {
   return (
     <div className="relative flex items-center gap-3 rounded-xl border bg-card p-2.5">
-      <span className="absolute -top-2 -left-2 z-10 flex h-[22px] w-[22px] items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-bold shadow-sm leading-none">
+      <span className="absolute -top-2 -left-2 z-10 flex h-[22px] w-[22px] items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-bold shadow-sm">
         {pin.position}
       </span>
       {pin.recipeImage
@@ -2185,6 +2187,16 @@ function HouseholdNotifications({ household, seenNotifIds, onMarkSeen }: {
     onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Failed'),
   });
 
+  const dismissMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/api/households/join-requests/${id}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.household.pending() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.household.pendingSent() });
+      toast.success('Dismissed');
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Failed'),
+  });
+
   const inboundItems = [...(pending?.invites ?? []), ...(pending?.requests ?? [])];
   const outboundRequests = pendingSent?.sentRequests ?? [];
   const outboundInvites = pendingSent?.sentInvites ?? [];
@@ -2195,10 +2207,10 @@ function HouseholdNotifications({ household, seenNotifIds, onMarkSeen }: {
     <Tabs defaultValue="inbound">
       <TabsList className="w-full h-8 mb-4 rounded-lg bg-muted/40 border border-border/50 p-0.5">
         <TabsTrigger value="inbound" className="flex-1 text-[11px] h-7 rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm">
-          Inbound{inboundItems.filter(i => !seenNotifIds.has(i.id)).length > 0 && <span className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground text-[9px] font-bold leading-none">{inboundItems.filter(i => !seenNotifIds.has(i.id)).length}</span>}
+          Received{inboundItems.filter(i => !seenNotifIds.has(i.id)).length > 0 && <span className="ml-1 inline-grid h-4 w-4 place-items-center rounded-full bg-primary text-primary-foreground text-[9px] font-bold">{inboundItems.filter(i => !seenNotifIds.has(i.id)).length}</span>}
         </TabsTrigger>
         <TabsTrigger value="outbound" className="flex-1 text-[11px] h-7 rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm">
-          Outbound
+          Sent
         </TabsTrigger>
       </TabsList>
 
@@ -2215,53 +2227,62 @@ function HouseholdNotifications({ household, seenNotifIds, onMarkSeen }: {
         {!isLoading && inboundItems.length === 0 && (
           <p className="text-sm text-muted-foreground py-4 text-center">No pending invites or requests.</p>
         )}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {inboundItems.map((item) => (
-          <div key={item.id} className="rounded-xl border border-border/60 bg-card/80 p-3 space-y-2.5">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <button
-                  type="button"
-                  className="shrink-0"
-                  onClick={() => setBioTarget({ userId: item.id, name: item.fromName, handle: item.fromHandle, image: item.fromImage })}>
-                  <Avatar className="h-7 w-7 hover:ring-2 hover:ring-primary transition-all cursor-pointer">
-                    <AvatarImage src={item.fromImage ?? undefined} />
-                    <AvatarFallback className="text-[10px]">{initials(item.fromName, item.fromHandle ?? '?')}</AvatarFallback>
-                  </Avatar>
-                </button>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">
-                    {item.type === 'INVITE' ? `Invite To ${item.householdName}` : `${item.fromHandle ? '@' + item.fromHandle : item.fromName ?? 'Someone'} Wants To Join`}
-                  </p>
-                  {item.type === 'INVITE' ? (
+        {inboundItems.length > 0 && (
+          <PaginatedItems
+            items={inboundItems}
+            renderItem={(item) => (
+              <div key={item.id} className="rounded-xl border border-border/60 bg-card/80 p-3 space-y-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     <button
                       type="button"
-                      className="text-muted-foreground truncate text-xs mt-0.5 hover:text-primary transition-colors text-left"
+                      className="shrink-0"
                       onClick={() => setBioTarget({ userId: item.id, name: item.fromName, handle: item.fromHandle, image: item.fromImage })}>
-                      From {item.fromHandle ? '@' + item.fromHandle : item.fromName ?? 'someone'}
+                      <Avatar className="h-7 w-7 hover:ring-2 hover:ring-primary transition-all cursor-pointer">
+                        <AvatarImage src={item.fromImage ?? undefined} />
+                        <AvatarFallback className="text-[10px]">{initials(item.fromName, item.fromHandle ?? '?')}</AvatarFallback>
+                      </Avatar>
                     </button>
-                  ) : (
-                    <p className="text-muted-foreground truncate text-xs mt-0.5">{item.householdName}</p>
-                  )}
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">
+                        {item.type === 'INVITE' ? `Invite To ${item.householdName}` : `${item.fromHandle ? '@' + item.fromHandle : item.fromName ?? 'Someone'} Wants To Join`}
+                      </p>
+                      {item.type === 'INVITE' ? (
+                        <button
+                          type="button"
+                          className="text-muted-foreground truncate text-xs mt-0.5 hover:text-primary transition-colors text-left"
+                          onClick={() => setBioTarget({ userId: item.id, name: item.fromName, handle: item.fromHandle, image: item.fromImage })}>
+                          From {item.fromHandle ? '@' + item.fromHandle : item.fromName ?? 'someone'}
+                        </button>
+                      ) : (
+                        <p className="text-muted-foreground truncate text-xs mt-0.5">{item.householdName}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Badge variant="outline" className="text-[10px] border-border/60">
+                      {item.type === 'INVITE' ? 'Invite' : 'Request'}
+                    </Badge>
+                    <button type="button" onClick={() => dismissMutation.mutate(item.id)} disabled={dismissMutation.isPending}
+                      className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-              <Badge variant="outline" className="shrink-0 text-[10px] border-border/60">
-                {item.type === 'INVITE' ? 'Invite' : 'Request'}
-              </Badge>
-            </div>
-            {(item.type === 'INVITE' || (item.type === 'REQUEST' && household?.role === 'OWNER')) && (
-              <div className="flex gap-2">
-                <Button size="sm" className="flex-1 h-8" onClick={() => acceptMutation.mutate(item.id)} disabled={acceptMutation.isPending}>
-                  <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Accept
-                </Button>
-                <Button size="sm" variant="outline" className="flex-1 h-8 border-border/60" onClick={() => declineMutation.mutate(item.id)} disabled={declineMutation.isPending}>
-                  <XCircle className="mr-1.5 h-3.5 w-3.5" />Decline
-                </Button>
+                {(item.type === 'INVITE' || (item.type === 'REQUEST' && household?.role === 'OWNER')) && (
+                  <div className="flex gap-2">
+                    <Button size="sm" className="flex-1 h-8" onClick={() => acceptMutation.mutate(item.id)} disabled={acceptMutation.isPending}>
+                      <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Accept
+                    </Button>
+                    <Button size="sm" variant="outline" className="flex-1 h-8 border-border/60" onClick={() => declineMutation.mutate(item.id)} disabled={declineMutation.isPending}>
+                      <XCircle className="mr-1.5 h-3.5 w-3.5" />Decline
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
-          </div>
-        ))}
-        </div>
+          />
+        )}
       </TabsContent>
 
       <TabsContent value="outbound" className="mt-0 space-y-2">
@@ -2269,42 +2290,53 @@ function HouseholdNotifications({ household, seenNotifIds, onMarkSeen }: {
         {!sentLoading && !hasOutbound && (
           <p className="text-sm text-muted-foreground py-4 text-center">No outbound invites or requests.</p>
         )}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {outboundRequests.map((req) => (
-          <div key={req.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/80 p-3">
-            <div className="min-w-0">
-              <p className="text-sm font-medium truncate">Request To Join {req.householdName}</p>
-              <p className="text-xs text-muted-foreground">Waiting for response</p>
-            </div>
-            <Badge variant="outline" className="text-[10px] shrink-0 border-border/60">Pending</Badge>
-          </div>
-        ))}
-        {outboundInvites.map((inv) => (
-          <div key={inv.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/80 p-3">
-            <div className="flex items-center gap-2 min-w-0">
-              <button
-                type="button"
-                className="shrink-0"
-                onClick={() => setBioTarget({ userId: inv.id, name: inv.inviteeName, handle: inv.inviteeHandle, image: inv.inviteeImage })}>
-                <Avatar className="h-7 w-7 hover:ring-2 hover:ring-primary transition-all cursor-pointer">
-                  <AvatarImage src={inv.inviteeImage ?? undefined} />
-                  <AvatarFallback className="text-[10px]">{initials(inv.inviteeName, inv.inviteeHandle ?? '?')}</AvatarFallback>
-                </Avatar>
-              </button>
-              <div className="min-w-0">
-                <button
-                  type="button"
-                  className="text-sm font-medium truncate hover:text-primary transition-colors text-left"
-                  onClick={() => setBioTarget({ userId: inv.id, name: inv.inviteeName, handle: inv.inviteeHandle, image: inv.inviteeImage })}>
-                  Invited {inv.inviteeName ?? inv.inviteeHandle ?? 'User'}
-                </button>
-                <p className="text-xs text-muted-foreground">To {inv.householdName}</p>
+        {hasOutbound && (
+          <PaginatedItems
+            items={[...outboundRequests.map(r => ({ ...r, _kind: 'request' as const })), ...outboundInvites.map(i => ({ ...i, _kind: 'invite' as const }))]}
+            renderItem={(item) => item._kind === 'request' ? (
+              <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/80 p-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">Request To Join {item.householdName}</p>
+                  <p className="text-xs text-muted-foreground">Waiting for response</p>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Badge variant="outline" className="text-[10px] border-border/60">Pending</Badge>
+                  <button type="button" onClick={() => dismissMutation.mutate(item.id)} disabled={dismissMutation.isPending}
+                    className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
-            </div>
-            <Badge variant="outline" className="text-[10px] shrink-0 border-border/60">Pending</Badge>
-          </div>
-        ))}
-        </div>
+            ) : (
+              <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/80 p-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <button type="button" className="shrink-0"
+                    onClick={() => setBioTarget({ userId: item.id, name: (item as typeof outboundInvites[number]).inviteeName, handle: (item as typeof outboundInvites[number]).inviteeHandle, image: (item as typeof outboundInvites[number]).inviteeImage })}>
+                    <Avatar className="h-7 w-7 hover:ring-2 hover:ring-primary transition-all cursor-pointer">
+                      <AvatarImage src={(item as typeof outboundInvites[number]).inviteeImage ?? undefined} />
+                      <AvatarFallback className="text-[10px]">{initials((item as typeof outboundInvites[number]).inviteeName, (item as typeof outboundInvites[number]).inviteeHandle ?? '?')}</AvatarFallback>
+                    </Avatar>
+                  </button>
+                  <div className="min-w-0">
+                    <button type="button"
+                      className="text-sm font-medium truncate hover:text-primary transition-colors text-left"
+                      onClick={() => setBioTarget({ userId: item.id, name: (item as typeof outboundInvites[number]).inviteeName, handle: (item as typeof outboundInvites[number]).inviteeHandle, image: (item as typeof outboundInvites[number]).inviteeImage })}>
+                      Invited {(item as typeof outboundInvites[number]).inviteeName ?? (item as typeof outboundInvites[number]).inviteeHandle ?? 'User'}
+                    </button>
+                    <p className="text-xs text-muted-foreground">To {item.householdName}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Badge variant="outline" className="text-[10px] border-border/60">Pending</Badge>
+                  <button type="button" onClick={() => dismissMutation.mutate(item.id)} disabled={dismissMutation.isPending}
+                    className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+          />
+        )}
       </TabsContent>
     </Tabs>
     <UserBioModal
@@ -2329,8 +2361,6 @@ function HouseholdNotifications({ household, seenNotifIds, onMarkSeen }: {
 
 // ─── Paginated history helpers ────────────────────────────────────────────────
 
-const HISTORY_PAGE = 8;
-
 function CollapsibleHistory({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
@@ -2345,18 +2375,41 @@ function CollapsibleHistory({ title, count, children }: { title: string; count: 
   );
 }
 
-function PaginatedItems<T>({ items, renderItem }: { items: T[]; renderItem: (item: T, i: number) => React.ReactNode }) {
-  const [visible, setVisible] = useState(HISTORY_PAGE);
-  const remaining = items.length - visible;
+function PaginatedItems<T>({ items, renderItem, fixedPageSize }: { items: T[]; renderItem: (item: T, i: number) => React.ReactNode; fixedPageSize?: number }) {
+  const [page, setPage] = useState(0);
+  const [responsivePageSize, setResponsivePageSize] = useState(() => window.innerWidth >= 1024 ? 8 : 4);
+
+  useEffect(() => {
+    if (fixedPageSize) return;
+    const update = () => setResponsivePageSize(window.innerWidth >= 1024 ? 8 : 4);
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, [fixedPageSize]);
+
+  const pageSize = fixedPageSize ?? responsivePageSize;
+
+  useEffect(() => { setPage(0); }, [items.length, pageSize]);
+
+  const totalPages = Math.ceil(items.length / pageSize);
+  const pageItems = items.slice(page * pageSize, (page + 1) * pageSize);
+
   return (
-    <div className="space-y-1.5">
-      {items.slice(0, visible).map((item, i) => renderItem(item, i))}
-      {remaining > 0 && (
-        <button type="button"
-          onClick={() => setVisible((v) => v + HISTORY_PAGE)}
-          className="w-full text-center text-xs text-primary hover:text-primary/80 py-1 font-medium transition-colors">
-          Show {Math.min(HISTORY_PAGE, remaining)} more
-        </button>
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {pageItems.map((item, i) => renderItem(item, page * pageSize + i))}
+      </div>
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <button type="button" onClick={() => setPage((p) => p - 1)} disabled={page === 0}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border/60 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-40 disabled:pointer-events-none">
+            <ChevronLeft className="h-3.5 w-3.5" />Prev
+          </button>
+          <span className="text-xs text-muted-foreground">Page {page + 1} of {totalPages}</span>
+          <button type="button" onClick={() => setPage((p) => p + 1)} disabled={page === totalPages - 1}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border/60 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-40 disabled:pointer-events-none">
+            Next<ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
       )}
     </div>
   );
@@ -2453,6 +2506,7 @@ function ShareRecipeViewModal({ share, open, onClose, onCopy, meId }: {
               <p className="text-sm text-foreground/75 leading-relaxed">{share.recipeDescription}</p>
             )}
             <RecipeMetaLine categoryName={detail?.categoryName} source={share.recipeSource} />
+            <TimeBadges prepTime={detail?.prepTime} cookTime={detail?.cookTime} />
           </div>
 
           <div className="flex items-center gap-2">
@@ -2506,8 +2560,6 @@ function ShareRecipeViewModal({ share, open, onClose, onCopy, meId }: {
                   className="w-full"
                 />
               </div>
-
-              <TimeBadges prepTime={detail.prepTime} cookTime={detail.cookTime} />
 
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ingredients</p>
@@ -2886,6 +2938,12 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
     onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Failed'),
   });
 
+  const deleteShareMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/api/shares/${id}`),
+    onSuccess: () => { toast.success('Deleted'); invalidateShares(); },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Failed'),
+  });
+
   const openSaveCopy = (s: ShareItem, mode: 'accept' | 'recopy', detail?: RecipeDetail | null) => {
     setSaveCopyShare({ id: s.id, title: s.recipeTitle ?? '', mode, detail: detail ?? null, share: s });
   };
@@ -2920,10 +2978,10 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
       <Tabs defaultValue="inbound">
         <TabsList className="w-full h-8 mb-4 rounded-lg bg-muted/40 border border-border/50 p-0.5">
           <TabsTrigger value="inbound" className="flex-1 text-[11px] h-7 rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            Inbound{[...pendingShares, ...recipeRequests].filter(s => !seenNotifIds.has(s.id)).length > 0 && <span className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground text-[9px] font-bold leading-none">{[...pendingShares, ...recipeRequests].filter(s => !seenNotifIds.has(s.id)).length}</span>}
+            Received{[...pendingShares, ...recipeRequests].filter(s => !seenNotifIds.has(s.id)).length > 0 && <span className="ml-1 inline-grid h-4 w-4 place-items-center rounded-full bg-primary text-primary-foreground text-[9px] font-bold">{[...pendingShares, ...recipeRequests].filter(s => !seenNotifIds.has(s.id)).length}</span>}
           </TabsTrigger>
           <TabsTrigger value="outbound" className="flex-1 text-[11px] h-7 rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            Outbound
+            Sent
           </TabsTrigger>
         </TabsList>
 
@@ -2945,42 +3003,50 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
           {recipeRequests.length > 0 && (
             <div className="space-y-2">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Requests For Your Recipes</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {recipeRequests.map((s) => (
-                <div key={s.id} className="rounded-xl border border-border/60 bg-card/80 p-3 space-y-2.5">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <button type="button" className="shrink-0"
-                      onClick={() => setBioTarget({ userId: s.fromUserId, name: s.fromUserName, handle: s.fromUserHandle, image: s.fromUserImage })}>
-                      <Avatar className="h-7 w-7 hover:ring-2 hover:ring-primary transition-all cursor-pointer">
-                        <AvatarImage src={s.fromUserImage ?? undefined} />
-                        <AvatarFallback className="text-[10px]">{initials(s.fromUserName, s.fromUserHandle ?? '?')}</AvatarFallback>
-                      </Avatar>
-                    </button>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">
-                        <button type="button"
-                          className="font-semibold hover:text-primary transition-colors"
-                          onClick={() => setBioTarget({ userId: s.fromUserId, name: s.fromUserName, handle: s.fromUserHandle, image: s.fromUserImage })}>
-                          {s.fromUserName ?? s.fromUserHandle ?? 'Someone'}
-                        </button>{' '}wants{' '}
-                        <span className="font-semibold">{s.recipeTitle ?? 'a recipe'}</span>
-                      </p>
+              <PaginatedItems
+                fixedPageSize={4}
+                items={recipeRequests}
+                renderItem={(s) => (
+                  <div key={s.id} className="rounded-xl border border-border/60 bg-card/80 p-3 space-y-2.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <button type="button" className="shrink-0"
+                        onClick={() => setBioTarget({ userId: s.fromUserId, name: s.fromUserName, handle: s.fromUserHandle, image: s.fromUserImage })}>
+                        <Avatar className="h-7 w-7 hover:ring-2 hover:ring-primary transition-all cursor-pointer">
+                          <AvatarImage src={s.fromUserImage ?? undefined} />
+                          <AvatarFallback className="text-[10px]">{initials(s.fromUserName, s.fromUserHandle ?? '?')}</AvatarFallback>
+                        </Avatar>
+                      </button>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">
+                          <button type="button"
+                            className="font-semibold hover:text-primary transition-colors"
+                            onClick={() => setBioTarget({ userId: s.fromUserId, name: s.fromUserName, handle: s.fromUserHandle, image: s.fromUserImage })}>
+                            {s.fromUserName ?? s.fromUserHandle ?? 'Someone'}
+                          </button>{' '}wants{' '}
+                          <span className="font-semibold">{s.recipeTitle ?? 'a recipe'}</span>
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Badge variant="outline" className="text-[10px] border-border/60">
+                          <BookOpen className="mr-1 h-2.5 w-2.5" />Request
+                        </Badge>
+                        <button type="button" onClick={() => deleteShareMutation.mutate(s.id)} disabled={deleteShareMutation.isPending}
+                          className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
-                    <Badge variant="outline" className="shrink-0 text-[10px] border-border/60">
-                      <BookOpen className="mr-1 h-2.5 w-2.5" />Request
-                    </Badge>
+                    <div className="flex gap-2">
+                      <Button size="sm" className="flex-1 h-8" onClick={() => fulfillMutation.mutate(s.id)} disabled={fulfillMutation.isPending}>
+                        <Send className="mr-1.5 h-3.5 w-3.5" />Share With Them
+                      </Button>
+                      <Button size="sm" variant="outline" className="flex-1 h-8 border-border/60" onClick={() => declineRequestMutation.mutate(s.id)} disabled={declineRequestMutation.isPending}>
+                        <XCircle className="mr-1.5 h-3.5 w-3.5" />Decline
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" className="flex-1 h-8" onClick={() => fulfillMutation.mutate(s.id)} disabled={fulfillMutation.isPending}>
-                      <Send className="mr-1.5 h-3.5 w-3.5" />Share With Them
-                    </Button>
-                    <Button size="sm" variant="outline" className="flex-1 h-8 border-border/60" onClick={() => declineRequestMutation.mutate(s.id)} disabled={declineRequestMutation.isPending}>
-                      <XCircle className="mr-1.5 h-3.5 w-3.5" />Decline
-                    </Button>
-                  </div>
-                </div>
-              ))}
-              </div>
+                )}
+              />
             </div>
           )}
 
@@ -2989,35 +3055,41 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
               {recipeRequests.length > 0 && (
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Shared With You</p>
               )}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {pendingShares.map((s) => (
-                <div key={s.id} className="rounded-xl border border-border/60 bg-card/80 p-3 space-y-2.5">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <button type="button" className="shrink-0"
-                      onClick={() => setBioTarget({ userId: s.fromUserId, name: s.fromUserName, handle: s.fromUserHandle, image: s.fromUserImage })}>
-                      <Avatar className="h-7 w-7 hover:ring-2 hover:ring-primary transition-all cursor-pointer">
-                        <AvatarImage src={s.fromUserImage ?? undefined} />
-                        <AvatarFallback className="text-[10px]">{initials(s.fromUserName, s.fromUserHandle ?? '?')}</AvatarFallback>
-                      </Avatar>
-                    </button>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">{s.recipeTitle ?? 'Untitled Recipe'}</p>
-                      <button type="button"
-                        className="text-xs text-muted-foreground hover:text-primary transition-colors text-left"
+              <PaginatedItems
+                fixedPageSize={4}
+                items={pendingShares}
+                renderItem={(s) => (
+                  <div key={s.id} className="rounded-xl border border-border/60 bg-card/80 p-3 space-y-2.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <button type="button" className="shrink-0"
                         onClick={() => setBioTarget({ userId: s.fromUserId, name: s.fromUserName, handle: s.fromUserHandle, image: s.fromUserImage })}>
-                        From {s.fromUserName ?? 'someone'}
+                        <Avatar className="h-7 w-7 hover:ring-2 hover:ring-primary transition-all cursor-pointer">
+                          <AvatarImage src={s.fromUserImage ?? undefined} />
+                          <AvatarFallback className="text-[10px]">{initials(s.fromUserName, s.fromUserHandle ?? '?')}</AvatarFallback>
+                        </Avatar>
+                      </button>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">{s.recipeTitle ?? 'Untitled Recipe'}</p>
+                        <button type="button"
+                          className="text-xs text-muted-foreground hover:text-primary transition-colors text-left"
+                          onClick={() => setBioTarget({ userId: s.fromUserId, name: s.fromUserName, handle: s.fromUserHandle, image: s.fromUserImage })}>
+                          From {s.fromUserName ?? 'someone'}
+                        </button>
+                      </div>
+                      <button type="button" onClick={() => deleteShareMutation.mutate(s.id)} disabled={deleteShareMutation.isPending}
+                        className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0">
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" className="flex-1 h-8" onClick={() => openSaveCopy(s, 'accept')}>
+                        Add To My Book
+                      </Button>
+                      <Button size="sm" variant="outline" className="flex-1 h-8 border-border/60" onClick={() => rejectMutation.mutate(s.id)} disabled={rejectMutation.isPending}>Decline</Button>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" className="flex-1 h-8" onClick={() => openSaveCopy(s, 'accept')}>
-                      Add To My Book
-                    </Button>
-                    <Button size="sm" variant="outline" className="flex-1 h-8 border-border/60" onClick={() => rejectMutation.mutate(s.id)} disabled={rejectMutation.isPending}>Decline</Button>
-                  </div>
-                </div>
-              ))}
-              </div>
+                )}
+              />
             </div>
           )}
 
@@ -3025,6 +3097,7 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
             <div className="pt-1">
               <CollapsibleHistory title="History" count={pastReceived.length}>
                 <PaginatedItems
+                  fixedPageSize={4}
                   items={pastReceived}
                   renderItem={(s) => (
                     <div key={s.id} className="rounded-2xl border bg-card overflow-hidden">
@@ -3075,6 +3148,10 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
                             className="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg border border-border bg-card text-xs font-medium hover:bg-accent transition-colors">
                             <Eye className="h-3.5 w-3.5" />View
                           </button>
+                          <button type="button" onClick={() => deleteShareMutation.mutate(s.id)} disabled={deleteShareMutation.isPending}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -3092,79 +3169,104 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
             <p className="text-sm text-muted-foreground py-4 text-center">No outbound shares or requests.</p>
           )}
 
-          {/* Pending recipe requests I sent — with Cancel */}
+          {/* Pending recipe requests I sent */}
           {pendingRequests.length > 0 && (
             <div className="space-y-2">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Recipe Requests</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {pendingRequests.map((s) => (
-                <div key={s.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/80 px-3 py-2.5">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <button type="button"
-                      className="shrink-0"
-                      onClick={() => setBioTarget({ userId: s.toUserId, name: s.toUserName, handle: s.toUserHandle, image: s.toUserImage })}>
-                      <Avatar className="h-7 w-7 hover:ring-2 hover:ring-primary transition-all">
-                        <AvatarImage src={s.toUserImage ?? undefined} />
-                        <AvatarFallback className="text-[10px]">{initials(s.toUserName, s.toUserHandle ?? '?')}</AvatarFallback>
-                      </Avatar>
-                    </button>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{s.recipeTitle ?? 'Untitled'}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Requested from{' '}
-                        <button type="button"
-                          className="font-medium text-foreground hover:text-primary transition-colors"
+              <PaginatedItems
+                fixedPageSize={4}
+                items={pendingRequests}
+                renderItem={(s) => (
+                  <div key={s.id} className="rounded-2xl border bg-card overflow-hidden">
+                    {s.recipeImage
+                      ? <div className="h-32 bg-muted overflow-hidden"><img src={s.recipeImage} alt={s.recipeTitle ?? ''} className="w-full h-full object-cover" /></div>
+                      : <div className="h-24 bg-muted flex items-center justify-center"><UtensilsCrossed className="h-7 w-7 text-muted-foreground/25" /></div>
+                    }
+                    <div className="p-3 space-y-2">
+                      <div>
+                        <p className="font-semibold text-sm leading-tight">{s.recipeTitle ?? 'Untitled'}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button type="button" className="shrink-0"
                           onClick={() => setBioTarget({ userId: s.toUserId, name: s.toUserName, handle: s.toUserHandle, image: s.toUserImage })}>
-                          {s.toUserName ?? s.toUserHandle ?? 'someone'}
+                          <Avatar className="h-5 w-5 hover:ring-2 hover:ring-primary transition-all">
+                            <AvatarImage src={s.toUserImage ?? undefined} />
+                            <AvatarFallback className="text-[9px]">{initials(s.toUserName, s.toUserHandle ?? '?')}</AvatarFallback>
+                          </Avatar>
                         </button>
-                      </p>
+                        <p className="text-xs text-muted-foreground truncate flex-1">
+                          Requested from{' '}
+                          <button type="button" className="font-medium text-foreground hover:text-primary transition-colors"
+                            onClick={() => setBioTarget({ userId: s.toUserId, name: s.toUserName, handle: s.toUserHandle, image: s.toUserImage })}>
+                            {s.toUserName ?? s.toUserHandle ?? 'someone'}
+                          </button>
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 pt-0.5">
+                        <span className="flex-1 flex items-center justify-center h-8 rounded-lg border border-border/60 text-xs text-muted-foreground">Awaiting Response</span>
+                        <Button size="sm" variant="outline"
+                          className="h-8 text-xs border-destructive/40 text-destructive hover:bg-destructive/10 shrink-0"
+                          onClick={() => cancelRequestMutation.mutate(s.id)} disabled={cancelRequestMutation.isPending}>
+                          Cancel
+                        </Button>
+                        <button type="button" onClick={() => deleteShareMutation.mutate(s.id)} disabled={deleteShareMutation.isPending}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                  <Button size="sm" variant="outline"
-                    className="h-7 text-xs border-destructive/40 text-destructive hover:bg-destructive/10 shrink-0"
-                    onClick={() => cancelRequestMutation.mutate(s.id)} disabled={cancelRequestMutation.isPending}>
-                    Cancel
-                  </Button>
-                </div>
-              ))}
-              </div>
+                )}
+              />
             </div>
           )}
 
           {/* Pending shares I sent (awaiting recipient acceptance) */}
           {pendingSentOther.length > 0 && (
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {pendingRequests.length > 0 && (
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Shares Awaiting Acceptance</p>
               )}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {pendingSentOther.map((s) => (
-                <div key={s.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/80 px-3 py-2.5">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <button type="button"
-                      className="shrink-0"
-                      onClick={() => setBioTarget({ userId: s.toUserId, name: s.toUserName, handle: s.toUserHandle, image: s.toUserImage })}>
-                      <Avatar className="h-7 w-7 hover:ring-2 hover:ring-primary transition-all">
-                        <AvatarImage src={s.toUserImage ?? undefined} />
-                        <AvatarFallback className="text-[10px]">{initials(s.toUserName, s.toUserHandle ?? '?')}</AvatarFallback>
-                      </Avatar>
-                    </button>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{s.recipeTitle ?? 'Untitled'}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Shared with{' '}
-                        <button type="button"
-                          className="font-medium text-foreground hover:text-primary transition-colors"
+              <PaginatedItems
+                fixedPageSize={4}
+                items={pendingSentOther}
+                renderItem={(s) => (
+                  <div key={s.id} className="rounded-2xl border bg-card overflow-hidden">
+                    {s.recipeImage
+                      ? <div className="h-32 bg-muted overflow-hidden"><img src={s.recipeImage} alt={s.recipeTitle ?? ''} className="w-full h-full object-cover" /></div>
+                      : <div className="h-24 bg-muted flex items-center justify-center"><UtensilsCrossed className="h-7 w-7 text-muted-foreground/25" /></div>
+                    }
+                    <div className="p-3 space-y-2">
+                      <div>
+                        <p className="font-semibold text-sm leading-tight">{s.recipeTitle ?? 'Untitled'}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button type="button" className="shrink-0"
                           onClick={() => setBioTarget({ userId: s.toUserId, name: s.toUserName, handle: s.toUserHandle, image: s.toUserImage })}>
-                          {s.toUserName ?? s.toUserHandle ?? 'someone'}
+                          <Avatar className="h-5 w-5 hover:ring-2 hover:ring-primary transition-all">
+                            <AvatarImage src={s.toUserImage ?? undefined} />
+                            <AvatarFallback className="text-[9px]">{initials(s.toUserName, s.toUserHandle ?? '?')}</AvatarFallback>
+                          </Avatar>
                         </button>
-                      </p>
+                        <p className="text-xs text-muted-foreground truncate flex-1">
+                          Shared with{' '}
+                          <button type="button" className="font-medium text-foreground hover:text-primary transition-colors"
+                            onClick={() => setBioTarget({ userId: s.toUserId, name: s.toUserName, handle: s.toUserHandle, image: s.toUserImage })}>
+                            {s.toUserName ?? s.toUserHandle ?? 'someone'}
+                          </button>
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 pt-0.5">
+                        <Badge variant="outline" className="flex-1 flex items-center justify-center h-8 text-xs border-border/60 rounded-lg">Pending</Badge>
+                        <button type="button" onClick={() => deleteShareMutation.mutate(s.id)} disabled={deleteShareMutation.isPending}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                  <Badge variant="outline" className="text-[10px] shrink-0 border-border/60">Pending</Badge>
-                </div>
-              ))}
-              </div>
+                )}
+              />
             </div>
           )}
 
@@ -3172,6 +3274,7 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
             <div className="pt-1">
               <CollapsibleHistory title="History" count={pastSent.length}>
                 <PaginatedItems
+                  fixedPageSize={4}
                   items={pastSent}
                   renderItem={(s) => (
                     <div key={s.id} className="rounded-2xl border bg-card overflow-hidden">
@@ -3190,10 +3293,8 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
                             <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">{s.recipeDescription}</p>
                           )}
                         </div>
-                        {/* Shared with row */}
                         <div className="flex items-center gap-2">
-                          <button type="button"
-                            className="shrink-0"
+                          <button type="button" className="shrink-0"
                             onClick={() => setBioTarget({ userId: s.toUserId, name: s.toUserName, handle: s.toUserHandle, image: s.toUserImage })}>
                             <Avatar className="h-5 w-5 hover:ring-2 hover:ring-primary transition-all">
                               <AvatarImage src={s.toUserImage ?? undefined} />
@@ -3202,14 +3303,12 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
                           </button>
                           <p className="text-xs text-muted-foreground truncate flex-1">
                             Shared with{' '}
-                            <button type="button"
-                              className="font-medium text-foreground hover:text-primary transition-colors"
+                            <button type="button" className="font-medium text-foreground hover:text-primary transition-colors"
                               onClick={() => setBioTarget({ userId: s.toUserId, name: s.toUserName, handle: s.toUserHandle, image: s.toUserImage })}>
                               {s.toUserName ?? s.toUserHandle ?? 'someone'}
                             </button>
                           </p>
                         </div>
-                        {/* Buttons */}
                         <div className="flex items-center gap-2 pt-0.5">
                           <span className={`flex-1 flex items-center justify-center h-8 rounded-lg text-xs font-medium ${s.status === 'ACCEPTED' ? 'bg-primary/10 text-primary' : 'border border-border/60 text-muted-foreground'}`}>
                             {s.status === 'ACCEPTED' ? 'In Their Book' : s.status}
@@ -3218,6 +3317,10 @@ function SharesSection({ seenNotifIds, onMarkSeen }: {
                             onClick={() => setViewShare({ ...s, fromUserId: s.toUserId, fromUserName: s.toUserName, fromUserHandle: s.toUserHandle, fromUserImage: s.toUserImage } as ShareItem)}
                             className="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg border border-border bg-card text-xs font-medium hover:bg-accent transition-colors">
                             <Eye className="h-3.5 w-3.5" />View
+                          </button>
+                          <button type="button" onClick={() => deleteShareMutation.mutate(s.id)} disabled={deleteShareMutation.isPending}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0">
+                            <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </div>
                       </div>

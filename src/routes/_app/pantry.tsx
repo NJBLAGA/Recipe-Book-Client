@@ -776,7 +776,7 @@ function IngredientSearchPanel({ open, onClose, pantryItems, onOpenRecipe }: {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-4 px-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-md bg-card rounded-2xl shadow-xl flex flex-col max-h-[90vh] animate-in fade-in slide-in-from-top-2 duration-200">
+      <div className="w-full max-w-md md:max-w-[80vw] lg:max-w-[56rem] bg-card rounded-2xl shadow-xl flex flex-col max-h-[90vh] animate-in fade-in slide-in-from-top-2 duration-200">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
           <div className="flex items-center gap-2">

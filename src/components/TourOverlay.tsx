@@ -70,7 +70,7 @@ const TOUR_STEPS: TourStep[] = [
   { page: 'recipes', title: 'Your Recipe Book', content: 'One shared recipe book for the whole household. Add recipes manually, scan cookbook pages, or import from a URL — all three land in the same review form.', highlight: 'recipe-list' },
   { page: 'recipes', title: 'Organise with categories', content: 'Create your own categories — Weeknight Dinners, Desserts, Christmas Specials — to keep the book tidy. Every recipe shows its live pantry status at a glance.', highlight: 'categories' },
   { page: 'pantry',  title: 'Your Pantry', content: 'Track what your household has in stock. Items are either In Stock or Out of Stock — tap any item to toggle it. The pantry powers live ingredient matching on every recipe.', highlight: 'pantry-items' },
-  { page: 'pantry',  title: 'Smart ingredient links', content: 'Out-of-stock items show a warning on any recipe that needs them. Tap an item to push it straight to your shopping list — no double entry.', highlight: 'out-of-stock' },
+  { page: 'pantry',  title: 'Smart ingredient links', content: 'Out-of-stock items show a warning on any recipe that needs them. Missing ingredients can be pushed straight to your shopping list from the pantry.', highlight: 'out-of-stock' },
   { page: 'shopping', title: 'Shopping List', content: 'One shared list for the whole household. Items arrive from recipes, the pantry, or added directly. Check them off as you shop.', highlight: 'list' },
   { page: 'shopping', title: 'Organised your way', content: 'Create categories that match your supermarket layout — Produce, Bakery, Freezer — so you never have to backtrack.', highlight: 'categories' },
   { page: 'community', title: 'Community', content: 'Discover what other households are cooking. Follow people you like, share your own recipes, and leave reviews. Every share creates an independent copy.', highlight: 'posts' },
@@ -83,11 +83,11 @@ const TOUR_STEPS: TourStep[] = [
 // ── Nav items ──────────────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
-  { page: 'recipes'   as DemoPage, icon: BookOpenText, label: 'Recipes' },
+  { page: 'recipes'   as DemoPage, icon: BookOpenText, label: 'Recipe Book' },
   { page: 'community' as DemoPage, icon: Users,        label: 'Community' },
   { page: 'profile'   as DemoPage, icon: UserCircle,   label: 'Profile' },
   { page: 'pantry'    as DemoPage, icon: Refrigerator, label: 'Pantry' },
-  { page: 'shopping'  as DemoPage, icon: ShoppingCart, label: 'Shopping' },
+  { page: 'shopping'  as DemoPage, icon: ShoppingCart, label: 'Shopping List' },
 ];
 
 const NAV_DESCRIPTIONS: Record<string, string> = {
@@ -140,6 +140,14 @@ function DemoNavbar() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Household requirement notice */}
+      <div className="rounded-xl border border-amber-400/40 bg-amber-400/10 px-3.5 py-3 flex items-start gap-2.5">
+        <span className="text-amber-500 text-base leading-none shrink-0 mt-0.5">⚠</span>
+        <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+          <span className="font-semibold">Household required.</span> Recipe Book, Pantry, and Shopping List are shared with your household. You must create or join a household before accessing these sections.
+        </p>
       </div>
 
       {/* Section descriptions */}
@@ -745,17 +753,22 @@ function DemoWelcome() {
           Shared recipes, pantry tracking, and shopping lists — built for households.
         </p>
       </div>
-      <div className="grid grid-cols-3 gap-3 w-full max-w-xs pt-2">
-        {[
-          { icon: BookOpenText, label: 'Recipes' },
-          { icon: Refrigerator, label: 'Pantry' },
-          { icon: ShoppingCart, label: 'Shopping' },
-        ].map(({ icon: Icon, label }) => (
-          <div key={label} className="flex flex-col items-center gap-2 rounded-2xl border bg-card/60 p-4">
-            <Icon className="h-6 w-6 text-primary" />
-            <span className="text-xs font-medium">{label}</span>
-          </div>
-        ))}
+      <div className="w-full max-w-xs space-y-3 pt-2">
+        <div className="grid grid-cols-2 gap-3">
+          {([
+            { icon: BookOpenText, label: 'Recipe Book' },
+            { icon: ShoppingCart, label: 'Shopping List' },
+          ] as { icon: React.ElementType; label: string }[]).map(({ icon: Icon, label }) => (
+            <div key={label} className="flex flex-col items-center gap-2 rounded-2xl border bg-card/60 p-4">
+              <Icon className="h-6 w-6 text-primary" />
+              <span className="text-xs font-medium whitespace-nowrap">{label}</span>
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center justify-center gap-3 rounded-2xl border bg-card/60 px-4 py-3.5">
+          <Refrigerator className="h-6 w-6 text-primary" />
+          <span className="text-sm font-medium">Pantry</span>
+        </div>
       </div>
     </div>
   );
