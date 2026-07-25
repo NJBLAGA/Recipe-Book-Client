@@ -145,14 +145,6 @@ Community tab
 
 ---
 
-## Environment Variables
-
-| Variable | Description |
-|---|---|
-| `VITE_API_URL` | Backend base URL in production (e.g. `https://api.thesharedpantryexperience.com`). Leave unset in development — the Vite dev proxy handles `/api` requests to `localhost:3000`. |
-
----
-
 ## Development
 
 ```bash
@@ -162,7 +154,7 @@ npm test           # Run all tests (81 tests across 7 files)
 npm run build      # Production build
 ```
 
-The dev server proxies all `/api` requests to `http://localhost:3000` — no `VITE_API_URL` needed locally.
+The dev server proxies all `/api` requests to `http://localhost:3000`.
 
 ---
 
