@@ -6,8 +6,10 @@ export class ApiError extends Error {
   }
 }
 
+const API_BASE = import.meta.env.VITE_API_URL ?? '';
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
+  const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     credentials: 'include',
     headers: {
@@ -33,7 +35,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 async function requestForm<T>(path: string, body: FormData, method = 'POST'): Promise<T> {
-  const res = await fetch(path, { method, credentials: 'include', body });
+  const res = await fetch(`${API_BASE}${path}`, { method, credentials: 'include', body });
 
   if (!res.ok) {
     if (res.status === 401) {

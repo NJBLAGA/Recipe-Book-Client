@@ -5,7 +5,7 @@ import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { BookOpenText, Eye, EyeOff } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,13 +39,16 @@ const schema = z
 type FormValues = z.infer<typeof schema>;
 
 function ResetPasswordPage() {
-  const { token, error } = Route.useSearch();
+  const { token: tokenParam, error } = Route.useSearch();
+  const tokenRef = useRef(tokenParam);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
   useEffect(() => {
-    if (token) window.history.replaceState({}, '', '/reset-password');
-  }, [token]);
+    if (tokenRef.current) {
+      window.history.replaceState({}, '', '/reset-password');
+    }
+  }, []);
 
   const form = useForm<FormValues>({
     resolver: standardSchemaResolver(schema),
@@ -54,7 +57,7 @@ function ResetPasswordPage() {
 
   const resetMutation = useMutation({
     mutationFn: (newPassword: string) =>
-      api.post('/api/auth/reset-password', { newPassword, token }),
+      api.post('/api/auth/reset-password', { newPassword, token: tokenRef.current }),
     onSuccess: () => {
       window.location.href = '/sign-in?passwordReset=true';
     },
@@ -63,6 +66,7 @@ function ResetPasswordPage() {
     },
   });
 
+  const token = tokenRef.current;
   if (error === 'INVALID_TOKEN' || (!token && !error)) {
     return (
       <div className="w-full max-w-sm space-y-6 text-center">

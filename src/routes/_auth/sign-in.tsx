@@ -105,7 +105,7 @@ function SignInPage() {
         </div>
         <div className="text-center">
           <h1 className="text-xl font-bold tracking-tight leading-tight">The Shared Pantry Experience</h1>
-          <p className="text-muted-foreground mt-1 text-sm">Sign in to your household</p>
+          <p className="text-muted-foreground mt-1 text-sm">Welcome back to your pantry experience</p>
         </div>
       </div>
 

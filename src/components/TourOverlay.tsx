@@ -877,7 +877,7 @@ export function TourOverlay() {
         <div className="shrink-0 flex items-center justify-between px-4 py-2.5 border-b bg-background/95 backdrop-blur-sm">
           <div className="flex items-center gap-2">
             <BookOpenText className="h-4 w-4 text-primary" />
-            <span className="text-sm font-semibold">Recipe Book</span>
+            <span className="text-sm font-semibold">The Shared Pantry Experience</span>
             <span className="rounded-full bg-primary/15 text-primary text-[10px] font-semibold px-2 py-0.5">Demo</span>
           </div>
           <button type="button" onClick={stopTour}

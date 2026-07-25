@@ -20,8 +20,8 @@ export default defineConfig({
       filename: 'sw.ts',
       includeAssets: ['favicon.svg'],
       manifest: {
-        name: 'Recipe Book',
-        short_name: 'Recipe Book',
+        name: 'The Shared Pantry Experience',
+        short_name: 'Shared Pantry',
         description: 'Your household recipe book, pantry and shopping list',
         theme_color: '#1c1917',
         background_color: '#fafaf9',

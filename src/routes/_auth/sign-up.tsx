@@ -79,7 +79,7 @@ function SignUpPage() {
         </div>
         <div className="text-center">
           <h1 className="text-2xl font-semibold tracking-tight">Create an account</h1>
-          <p className="text-muted-foreground mt-1 text-sm">Start your household recipe book</p>
+          <p className="text-muted-foreground mt-1 text-sm">Start your pantry experience</p>
         </div>
       </div>
 
@@ -95,7 +95,7 @@ function SignUpPage() {
                   <FormControl>
                     <Input
                       type="text"
-                      placeholder="Nathan"
+                      placeholder="Jane"
                       autoComplete="given-name"
                       autoFocus
                       {...field}
@@ -114,7 +114,7 @@ function SignUpPage() {
                   <FormControl>
                     <Input
                       type="text"
-                      placeholder="Blaga"
+                      placeholder="Smith"
                       autoComplete="family-name"
                       {...field}
                     />
