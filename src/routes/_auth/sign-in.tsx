@@ -104,7 +104,7 @@ function SignInPage() {
           <BookOpenText className="h-6 w-6" />
         </div>
         <div className="text-center">
-          <h1 className="text-2xl font-semibold tracking-tight">Recipe Book</h1>
+          <h1 className="text-xl font-bold tracking-tight leading-tight">The Shared Pantry Experience</h1>
           <p className="text-muted-foreground mt-1 text-sm">Sign in to your household</p>
         </div>
       </div>
