@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ShoppingCart, Plus, Pencil, Trash2, X, Check, Loader2, Search,
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Tag, ArrowUp, ArrowDown,
-  ImagePlus, Maximize2, SlidersHorizontal,
+  ImagePlus, Maximize2, SlidersHorizontal, Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -273,8 +273,10 @@ function AddItemModal({ open, onClose, categories }: {
   const [files, setFiles] = useState<File[]>([]);
   const [adding, setAdding] = useState(false);
   const addImgRef = useRef<HTMLInputElement>(null);
+  const [catSuggest, setCatSuggest] = useState<{ suggestion: string; categoryId: string | null } | null>(null);
+  const [catSuggestLoading, setCatSuggestLoading] = useState(false);
 
-  const reset = () => { setName(''); setCategoryId(''); setQuantity(''); setUnit(''); setNote(''); setFiles([]); };
+  const reset = () => { setName(''); setCategoryId(''); setQuantity(''); setUnit(''); setNote(''); setFiles([]); setCatSuggest(null); };
 
   useEffect(() => { if (!open) reset(); }, [open]);
 
@@ -301,6 +303,33 @@ function AddItemModal({ open, onClose, categories }: {
       toast.error(e instanceof ApiError ? e.message : 'Failed');
     } finally {
       setAdding(false);
+    }
+  };
+
+  const createSuggestedCatMutation = useMutation({
+    mutationFn: (catName: string) => api.post<ShoppingCategory>('/api/shopping-list/categories', { name: catName }),
+    onSuccess: (newCat) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.shoppingList.categories() });
+      setCategoryId(newCat.id);
+      setCatSuggest(null);
+    },
+    onError: () => toast.error('Failed to create category'),
+  });
+
+  const suggestShopCat = async () => {
+    if (!name.trim() || catSuggestLoading) return;
+    setCatSuggestLoading(true);
+    setCatSuggest(null);
+    try {
+      const data = await api.post<{ suggestion: string; categoryId: string | null }>(
+        '/api/suggestions/category',
+        { type: 'shopping-list', name: name.trim() },
+      );
+      setCatSuggest(data);
+    } catch {
+      toast.error('Could not suggest a category');
+    } finally {
+      setCatSuggestLoading(false);
     }
   };
 
@@ -343,10 +372,22 @@ function AddItemModal({ open, onClose, categories }: {
               value={note} onChange={(e) => setNote(e.target.value)} />
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Category</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-muted-foreground">Category</label>
+              <button
+                type="button"
+                onClick={suggestShopCat}
+                disabled={!name.trim() || catSuggestLoading}
+                className="flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 transition-colors disabled:opacity-40">
+                {catSuggestLoading
+                  ? <Loader2 className="h-3 w-3 animate-spin" />
+                  : <Sparkles className="h-3 w-3" />}
+                Suggest
+              </button>
+            </div>
             <Select
               value={categoryId || '__none__'}
-              onValueChange={(v) => setCategoryId(v === '__none__' ? '' : v)}>
+              onValueChange={(v) => { setCategoryId(v === '__none__' ? '' : v); setCatSuggest(null); }}>
               <SelectTrigger className="h-9 w-full text-sm">
                 <SelectValue />
               </SelectTrigger>
@@ -355,6 +396,34 @@ function AddItemModal({ open, onClose, categories }: {
                 {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
               </SelectContent>
             </Select>
+            {catSuggest && (
+              <div className="flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2">
+                <Sparkles className="h-3 w-3 shrink-0 text-primary/70" />
+                <p className="flex-1 text-[11px]">
+                  Suggested: <span className="font-semibold">{catSuggest.suggestion}</span>
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (catSuggest.categoryId) {
+                        setCategoryId(catSuggest.categoryId);
+                        setCatSuggest(null);
+                      } else {
+                        createSuggestedCatMutation.mutate(catSuggest.suggestion);
+                      }
+                    }}
+                    disabled={createSuggestedCatMutation.isPending}
+                    className="text-[10px] font-semibold text-primary hover:text-primary/80 transition-colors disabled:opacity-50">
+                    {catSuggest.categoryId ? 'Use' : 'Create & use'}
+                  </button>
+                  <button type="button" onClick={() => setCatSuggest(null)}
+                    className="text-muted-foreground hover:text-foreground transition-colors">
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Images</label>

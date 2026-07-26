@@ -8,7 +8,7 @@ import {
   Link2, UtensilsCrossed, ShoppingCart, AlertCircle, History,
   Check, ChefHat, ChevronDown, ChevronUp, Loader2, SlidersHorizontal,
   FileText, Tag, ArrowRight, ImagePlus, Maximize2, Square, CheckSquare,
-  CheckCircle2, XCircle, Clock, Eye, FileDown,
+  CheckCircle2, XCircle, Clock, Eye, FileDown, Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -412,6 +412,8 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
   const [formImages, setFormImages] = useState<FormImage[]>([]);
   const [createCatOpen, setCreateCatOpen] = useState(false);
   const [newCatName, setNewCatName] = useState('');
+  const [catSuggest, setCatSuggest] = useState<{ suggestion: string; categoryId: string | null } | null>(null);
+  const [catSuggestLoading, setCatSuggestLoading] = useState(false);
 
   const scanFileInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -446,6 +448,7 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
       setMode(initialMode);
       setScanPhase('select');
       setScanFiles([]);
+      setCatSuggest(null);
       setUrlInput('');
       setUrlPhase('input');
       setUrlError('');
@@ -553,6 +556,23 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
     },
     onError: (e) => toast.error(e instanceof ApiError ? e.message : 'Failed'),
   });
+
+  const suggestRecipeCat = async () => {
+    if (!form.title.trim() || catSuggestLoading) return;
+    setCatSuggestLoading(true);
+    setCatSuggest(null);
+    try {
+      const data = await api.post<{ suggestion: string; categoryId: string | null }>(
+        '/api/suggestions/category',
+        { type: 'recipe', name: form.title.trim() },
+      );
+      setCatSuggest(data);
+    } catch {
+      toast.error('Could not suggest a category');
+    } finally {
+      setCatSuggestLoading(false);
+    }
+  };
 
   const activeFormImages = formImages.filter((i) => !i.toDelete);
 
@@ -1008,7 +1028,19 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
                     {/* Category + Servings */}
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
-                        <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Category *</label>
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Category *</label>
+                          <button
+                            type="button"
+                            onClick={suggestRecipeCat}
+                            disabled={!form.title.trim() || catSuggestLoading}
+                            className="flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 transition-colors disabled:opacity-40">
+                            {catSuggestLoading
+                              ? <Loader2 className="h-3 w-3 animate-spin" />
+                              : <Sparkles className="h-3 w-3" />}
+                            Suggest
+                          </button>
+                        </div>
                         <Select
                           value={form.categoryId}
                           onValueChange={(val) => {
@@ -1018,6 +1050,7 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
                             } else {
                               setForm((p) => ({ ...p, categoryId: val }));
                             }
+                            setCatSuggest(null);
                           }}>
                           <SelectTrigger className="h-9 text-sm">
                             <SelectValue placeholder="Select a category…" />
@@ -1042,6 +1075,34 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
                           onChange={(e) => setForm((p) => ({ ...p, baseServings: e.target.value }))} />
                       </div>
                     </div>
+                    {catSuggest && (
+                      <div className="flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2">
+                        <Sparkles className="h-3 w-3 shrink-0 text-primary/70" />
+                        <p className="flex-1 text-[11px]">
+                          Suggested: <span className="font-semibold">{catSuggest.suggestion}</span>
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (catSuggest.categoryId) {
+                                setForm((p) => ({ ...p, categoryId: catSuggest.categoryId! }));
+                              } else {
+                                createCategoryMutation.mutate(catSuggest.suggestion);
+                              }
+                              setCatSuggest(null);
+                            }}
+                            disabled={createCategoryMutation.isPending}
+                            className="text-[10px] font-semibold text-primary hover:text-primary/80 transition-colors disabled:opacity-50">
+                            {catSuggest.categoryId ? 'Use' : 'Create & use'}
+                          </button>
+                          <button type="button" onClick={() => setCatSuggest(null)}
+                            className="text-muted-foreground hover:text-foreground transition-colors">
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Prep & Cook time */}
                     <div className="grid grid-cols-2 gap-3">
@@ -1136,7 +1197,7 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
                               onChange={(e) => setIng(idx, 'note', e.target.value)} />
                             <button type="button" onClick={() => removeIng(idx)}
                               className="pt-1.5 shrink-0 text-muted-foreground hover:text-destructive transition-colors">
-                              <Minus className="h-4 w-4" />
+                              <Trash2 className="h-4 w-4" />
                             </button>
                           </div>
                         ))}
@@ -1168,7 +1229,7 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
                                 value={step.text} onChange={(e) => setStep(idx, e.target.value)} />
                               <button type="button" onClick={() => removeStep(idx)}
                                 className="pt-2 shrink-0 text-muted-foreground hover:text-destructive transition-colors">
-                                <Minus className="h-4 w-4" />
+                                <Trash2 className="h-4 w-4" />
                               </button>
                             </div>
                             {/* Sub-steps */}
@@ -1185,7 +1246,7 @@ function RecipeForm({ open, onClose, categories, initial, editId, initialMode = 
                                     />
                                     <button type="button" onClick={() => removeSubStep(idx, si)}
                                       className="shrink-0 text-muted-foreground hover:text-destructive transition-colors">
-                                      <Minus className="h-3.5 w-3.5" />
+                                      <Trash2 className="h-3.5 w-3.5" />
                                     </button>
                                   </div>
                                 ))}
