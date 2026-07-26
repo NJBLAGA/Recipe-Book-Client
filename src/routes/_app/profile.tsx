@@ -1268,10 +1268,7 @@ function RecipeSelectModal({ open, onClose, onSelect, excludeIds }: {
                       <UtensilsCrossed className="h-3.5 w-3.5 text-muted-foreground/40" />
                     </div>
                 }
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium truncate leading-tight">{r.title}</p>
-                  {r.description && <p className="text-[10px] text-muted-foreground truncate mt-0.5 leading-tight">{r.description}</p>}
-                </div>
+                <p className="min-w-0 flex-1 text-xs font-medium truncate leading-tight">{r.title}</p>
               </button>
             ))}
           </div>
