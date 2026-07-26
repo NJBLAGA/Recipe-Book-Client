@@ -32,9 +32,20 @@ const DEMO_RECIPES = [
 ];
 
 const DEMO_PANTRY_CATEGORIES = [
-  { label: 'Dairy & Eggs', items: [{ name: 'Eggs', inStock: true }, { name: 'Butter', inStock: true }, { name: 'Parmesan', inStock: false }] },
-  { label: 'Dry Goods',    items: [{ name: 'Pasta', inStock: true }, { name: 'Rice', inStock: true }, { name: 'Flour', inStock: false }] },
-  { label: 'Produce',      items: [{ name: 'Avocado', inStock: true }, { name: 'Lemon', inStock: false }] },
+  { label: 'Dairy & Eggs', items: [
+    { name: 'Eggs',     stockStatus: 'in_stock'     as const },
+    { name: 'Butter',   stockStatus: 'low_stock'    as const },
+    { name: 'Parmesan', stockStatus: 'out_of_stock' as const },
+  ]},
+  { label: 'Dry Goods', items: [
+    { name: 'Pasta', stockStatus: 'in_stock'     as const },
+    { name: 'Rice',  stockStatus: 'low_stock'    as const },
+    { name: 'Flour', stockStatus: 'out_of_stock' as const },
+  ]},
+  { label: 'Produce', items: [
+    { name: 'Avocado', stockStatus: 'in_stock'     as const },
+    { name: 'Lemon',   stockStatus: 'out_of_stock' as const },
+  ]},
 ];
 
 const DEMO_SHOPPING_CATS = [
@@ -69,8 +80,8 @@ const TOUR_STEPS: TourStep[] = [
   { page: 'navbar',  title: 'Finding your way around', content: 'Five sections live in the navigation bar — at the bottom on most browsers, or at the top if you\'re using Safari on iPhone. Tap any icon to jump straight there.' },
   { page: 'recipes', title: 'Your Recipe Book', content: 'One shared recipe book for the whole household. Add recipes manually, scan cookbook pages, or import from a URL — all three land in the same review form.', highlight: 'recipe-list' },
   { page: 'recipes', title: 'Organise with categories', content: 'Create your own categories — Weeknight Dinners, Desserts, Christmas Specials — to keep the book tidy. Every recipe shows its live pantry status at a glance.', highlight: 'categories' },
-  { page: 'pantry',  title: 'Your Pantry', content: 'Track what your household has in stock. Items are either In Stock or Out of Stock — tap any item to toggle it. The pantry powers live ingredient matching on every recipe.', highlight: 'pantry-items' },
-  { page: 'pantry',  title: 'Smart ingredient links', content: 'Out-of-stock items show a warning on any recipe that needs them. Missing ingredients can be pushed straight to your shopping list from the pantry.', highlight: 'out-of-stock' },
+  { page: 'pantry',  title: 'Your Pantry', content: 'Track what your household has in stock. Each item is In Stock, Low Stock, or Out of Stock — tap any item to update. The pantry powers live ingredient matching on every recipe.', highlight: 'pantry-items' },
+  { page: 'pantry',  title: 'Smart ingredient links', content: 'Low-stock and out-of-stock items surface a warning on any recipe that needs them. Missing or low ingredients can be pushed straight to your shopping list from here.', highlight: 'out-of-stock' },
   { page: 'shopping', title: 'Shopping List', content: 'One shared list for the whole household. Items arrive from recipes, the pantry, or added directly. Check them off as you shop.', highlight: 'list' },
   { page: 'shopping', title: 'Organised your way', content: 'Create categories that match your supermarket layout — Produce, Bakery, Freezer — so you never have to backtrack.', highlight: 'categories' },
   { page: 'community', title: 'Community', content: 'Discover what other households are cooking. Follow people you like, share your own recipes, and leave reviews. Every share creates an independent copy.', highlight: 'posts' },
@@ -283,6 +294,7 @@ function DemoPantry({ highlight }: { highlight?: string }) {
       {/* Legend */}
       <div className="flex items-center gap-4 mb-4 text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500" />In stock</span>
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" />Low stock</span>
         <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-rose-500" />Out of stock</span>
         <span className="ml-auto text-[10px]">8 items</span>
       </div>
@@ -290,7 +302,7 @@ function DemoPantry({ highlight }: { highlight?: string }) {
       {/* Category groups */}
       <div className="space-y-6 pb-48">
         {DEMO_PANTRY_CATEGORIES.map((cat) => (
-          <div key={cat.label} className={cn('space-y-2', highlight === 'out-of-stock' && cat.items.some((i) => !i.inStock) && 'ring-2 ring-rose-400 ring-offset-2 ring-offset-background rounded-xl p-2')}>
+          <div key={cat.label} className={cn('space-y-2', highlight === 'out-of-stock' && cat.items.some((i) => i.stockStatus !== 'in_stock') && 'ring-2 ring-rose-400 ring-offset-2 ring-offset-background rounded-xl p-2')}>
             <div className="flex w-full items-center gap-2 text-left">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{cat.label}</span>
               <span className="text-[10px] text-muted-foreground">({cat.items.length})</span>
@@ -305,12 +317,17 @@ function DemoPantry({ highlight }: { highlight?: string }) {
                     <p className="text-sm font-semibold leading-snug line-clamp-1">{item.name}</p>
                     <span className={cn(
                       'inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none',
-                      item.inStock
+                      item.stockStatus === 'in_stock'
                         ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-                        : 'bg-rose-500/15 text-rose-600 dark:text-rose-400',
+                        : item.stockStatus === 'low_stock'
+                          ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                          : 'bg-rose-500/15 text-rose-600 dark:text-rose-400',
                     )}>
-                      <span className={cn('h-1 w-1 rounded-full shrink-0', item.inStock ? 'bg-emerald-500' : 'bg-rose-500')} />
-                      {item.inStock ? 'In Stock' : 'Out of Stock'}
+                      <span className={cn(
+                        'h-1 w-1 rounded-full shrink-0',
+                        item.stockStatus === 'in_stock' ? 'bg-emerald-500' : item.stockStatus === 'low_stock' ? 'bg-amber-500' : 'bg-rose-500',
+                      )} />
+                      {item.stockStatus === 'in_stock' ? 'In Stock' : item.stockStatus === 'low_stock' ? 'Low Stock' : 'Out of Stock'}
                     </span>
                   </div>
                   <ChevronRight className="h-4 w-4 text-muted-foreground/40 shrink-0" />
