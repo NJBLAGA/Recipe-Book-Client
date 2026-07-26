@@ -66,7 +66,7 @@ interface TourStep { page: DemoPage; title: string; content: string; highlight?:
 
 const TOUR_STEPS: TourStep[] = [
   { page: 'welcome', title: 'Welcome to The Shared Pantry Experience', content: 'Your household\'s all-in-one cooking companion — shared recipe book, pantry, and shopping list. Let\'s take a quick look around.' },
-  { page: 'navbar',  title: 'Finding your way around', content: 'Five sections live in the navigation bar at the bottom. Tap any icon to jump straight there — it\'s always visible, no matter where you are in the app.' },
+  { page: 'navbar',  title: 'Finding your way around', content: 'Five sections live in the navigation bar — at the bottom on most browsers, or at the top if you\'re using Safari on iPhone. Tap any icon to jump straight there.' },
   { page: 'recipes', title: 'Your Recipe Book', content: 'One shared recipe book for the whole household. Add recipes manually, scan cookbook pages, or import from a URL — all three land in the same review form.', highlight: 'recipe-list' },
   { page: 'recipes', title: 'Organise with categories', content: 'Create your own categories — Weeknight Dinners, Desserts, Christmas Specials — to keep the book tidy. Every recipe shows its live pantry status at a glance.', highlight: 'categories' },
   { page: 'pantry',  title: 'Your Pantry', content: 'Track what your household has in stock. Items are either In Stock or Out of Stock — tap any item to toggle it. The pantry powers live ingredient matching on every recipe.', highlight: 'pantry-items' },
@@ -122,13 +122,13 @@ function DemoNavbar() {
         <h1 className="text-xl font-bold">Navigation</h1>
       </div>
       <p className="text-sm text-muted-foreground leading-relaxed">
-        The bar at the bottom is always visible — tap any icon to jump straight to that section.
+        The navigation bar is always visible — it sits at the bottom on most browsers, and at the top when using Safari on iPhone.
       </p>
 
       {/* Nav bar preview */}
       <div className="rounded-2xl border bg-card overflow-hidden shadow-sm">
         <div className="px-3 py-1.5 border-b bg-muted/20">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-center">Navigation Bar (always at the bottom)</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-center">Navigation Bar — bottom (most browsers) · top (Safari on iPhone)</p>
         </div>
         <div className="flex items-center justify-around px-3 py-3 bg-background/95">
           {NAV_ITEMS.map(({ page, icon: Icon, label }, i) => (

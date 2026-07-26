@@ -1,5 +1,5 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { BookOpenText, ShoppingCart, Refrigerator, Users, UserCircle, Clock, X } from 'lucide-react';
 import { authClient } from '@/lib/auth';
 import { useHousehold } from '@/hooks/useHousehold';
@@ -21,6 +21,23 @@ const navItems = [
   { to: '/pantry',       label: 'Pantry',         shortLabel: 'Pantry',    icon: Refrigerator, exact: false },
   { to: '/shopping-list', label: 'Shopping List', shortLabel: 'Shopping', icon: ShoppingCart, exact: false },
 ];
+
+// Returns true when running in Safari on iOS in browser mode (not PWA, not Chrome/Firefox/Edge on iOS).
+// In this case the nav is placed at the top to avoid being hidden under Safari's bottom toolbar.
+function useIsIOSSafariBrowser() {
+  return useMemo(() => {
+    const ua = navigator.userAgent;
+    const isIOS        = /iP(hone|ad|od)/i.test(ua);
+    const isWebKit     = /WebKit/i.test(ua);
+    const isChrome     = /CriOS/i.test(ua);
+    const isFirefox    = /FxiOS/i.test(ua);
+    const isEdge       = /EdgiOS/i.test(ua);
+    const isStandalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+    return isIOS && isWebKit && !isChrome && !isFirefox && !isEdge && !isStandalone;
+  }, []);
+}
 
 function Spinner() {
   return (
@@ -58,6 +75,7 @@ function AppLayout() {
   const { data: me } = useMe();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isTopNav = useIsIOSSafariBrowser();
 
   // User deliberately chose "wait for an invite" on the onboarding screen
   const householdSkipped =
@@ -101,57 +119,80 @@ function AppLayout() {
     ? navItems.filter((item) => item.to === '/profile')
     : navItems;
 
+  const navItems = visibleNavItems.map(({ to, label, shortLabel, icon: Icon, exact }) => {
+    const active = exact ? pathname === to : pathname.startsWith(to);
+    const showAvatar = to === '/profile' && !!me?.image;
+    return (
+      <Link
+        key={to}
+        to={to as '/'}
+        className={cn(
+          'flex flex-row items-center gap-1.5 rounded-xl transition-colors min-w-0',
+          'px-1.5 py-1.5 text-[9px]',
+          'sm:gap-2 sm:px-3 sm:py-2 sm:text-[11px]',
+          'lg:gap-2.5 lg:px-4 lg:text-sm',
+          active
+            ? 'text-primary font-medium'
+            : 'text-muted-foreground hover:text-foreground',
+        )}
+      >
+        {showAvatar ? (
+          <div
+            className={cn(
+              'h-4 w-4 shrink-0 overflow-hidden rounded-full lg:h-5 lg:w-5',
+              active
+                ? 'ring-1 ring-primary ring-offset-2 ring-offset-background'
+                : 'ring-1 ring-border',
+            )}
+          >
+            <img src={me!.image!} alt="" className="h-full w-full object-cover" />
+          </div>
+        ) : (
+          <Icon className={cn('h-4 w-4 shrink-0 lg:h-5 lg:w-5', active && 'stroke-[2.5]')} />
+        )}
+        <span className="truncate leading-none">
+          <span className="sm:hidden">{shortLabel}</span>
+          <span className="hidden sm:inline">{label}</span>
+        </span>
+      </Link>
+    );
+  });
+
   return (
     <TimerProvider>
       <TimerDialog />
       <FloatingTimer />
-    <div className="flex min-h-svh flex-col">
-      <main className="flex-1 pb-20">
-        <Outlet />
-      </main>
-      <nav className="bg-background/95 border-t fixed bottom-0 left-0 right-0 z-50 supports-[backdrop-filter]:backdrop-blur-sm">
-        <div className="mx-auto flex max-w-4xl items-center justify-around px-2 py-1.5 pb-[env(safe-area-inset-bottom)] sm:px-4 sm:py-2 lg:px-8">
-          {visibleNavItems.map(({ to, label, shortLabel, icon: Icon, exact }) => {
-            const active = exact ? pathname === to : pathname.startsWith(to);
-            const showAvatar = to === '/profile' && !!me?.image;
-            return (
-              <Link
-                key={to}
-                to={to as '/'}
-                className={cn(
-                  'flex flex-row items-center gap-1.5 rounded-xl transition-colors min-w-0',
-                  'px-1.5 py-1.5 text-[9px]',
-                  'sm:gap-2 sm:px-3 sm:py-2 sm:text-[11px]',
-                  'lg:gap-2.5 lg:px-4 lg:text-sm',
-                  active
-                    ? 'text-primary font-medium'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {showAvatar ? (
-                  <div
-                    className={cn(
-                      'h-4 w-4 shrink-0 overflow-hidden rounded-full lg:h-5 lg:w-5',
-                      active
-                        ? 'ring-1 ring-primary ring-offset-2 ring-offset-background'
-                        : 'ring-1 ring-border',
-                    )}
-                  >
-                    <img src={me!.image!} alt="" className="h-full w-full object-cover" />
-                  </div>
-                ) : (
-                  <Icon className={cn('h-4 w-4 shrink-0 lg:h-5 lg:w-5', active && 'stroke-[2.5]')} />
-                )}
-                <span className="truncate leading-none">
-                  <span className="sm:hidden">{shortLabel}</span>
-                  <span className="hidden sm:inline">{label}</span>
-                </span>
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
-    </div>
+      <div className="flex min-h-svh flex-col">
+        {isTopNav && (
+          <nav className="bg-background/95 border-b fixed top-0 left-0 right-0 z-50 supports-[backdrop-filter]:backdrop-blur-sm">
+            <div
+              className="mx-auto flex max-w-4xl items-center justify-around px-2 pb-1.5 sm:px-4 sm:pb-2 lg:px-8"
+              style={{ paddingTop: 'calc(env(safe-area-inset-top) + 6px)' }}
+            >
+              {navItems}
+            </div>
+          </nav>
+        )}
+        <main
+          className="flex-1"
+          style={isTopNav
+            ? { paddingTop: 'calc(env(safe-area-inset-top) + 3.5rem)' }
+            : { paddingBottom: '5rem' }
+          }
+        >
+          <Outlet />
+        </main>
+        {!isTopNav && (
+          <nav className="bg-background/95 border-t fixed bottom-0 left-0 right-0 z-50 supports-[backdrop-filter]:backdrop-blur-sm">
+            <div
+              className="mx-auto flex max-w-4xl items-center justify-around px-2 pt-1.5 sm:px-4 sm:pt-2 lg:px-8"
+              style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 6px)' }}
+            >
+              {navItems}
+            </div>
+          </nav>
+        )}
+      </div>
     </TimerProvider>
   );
 }
