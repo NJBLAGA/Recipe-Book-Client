@@ -177,7 +177,7 @@ function AppLayout() {
           className="flex-1"
           style={isTopNav
             ? { paddingTop: 'calc(env(safe-area-inset-top) + 3.5rem)' }
-            : { paddingBottom: '5rem' }
+            : { paddingBottom: 'calc(3.5rem + env(safe-area-inset-bottom))' }
           }
         >
           <Outlet />

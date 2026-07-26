@@ -3067,7 +3067,7 @@ function RecipesPage() {
     : undefined;
 
   return (
-    <div className="flex flex-col items-center px-4 pb-24 pt-6">
+    <div className="flex flex-col items-center px-4 pb-6 pt-6">
       <div data-timer-align className="w-full max-w-md sm:max-w-xl lg:max-w-3xl xl:max-w-5xl">
 
         {/* Header */}

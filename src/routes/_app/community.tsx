@@ -1447,7 +1447,7 @@ function CommunityPage() {
   };
 
   return (
-    <div className="flex flex-col items-center px-4 pb-24 pt-6">
+    <div className="flex flex-col items-center px-4 pb-6 pt-6">
       <div data-timer-align className="w-full max-w-md sm:max-w-xl lg:w-[65%] lg:max-w-5xl xl:max-w-[1400px]">
         <div className="mb-1 flex items-center gap-2" data-tour="community-header">
           <Users className="h-5 w-5 text-primary shrink-0" />
