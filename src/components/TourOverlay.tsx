@@ -749,7 +749,7 @@ function DemoWelcome() {
       </div>
       <div className="space-y-2">
         <h1 className="text-2xl font-bold">Welcome to The Shared Pantry Experience</h1>
-        <p className="text-sm text-muted-foreground leading-relaxed max-w-xs text-center">
+        <p className="text-sm text-muted-foreground leading-relaxed max-w-xs mx-auto text-center">
           Shared recipes, pantry tracking, and shopping lists — built for households.
         </p>
       </div>
