@@ -206,6 +206,8 @@ function ItemModal({ open, onClose, categories, editItem }: {
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [catSuggest, setCatSuggest] = useState<{ suggestion: string; categoryId: string | null } | null>(null);
   const [catSuggestLoading, setCatSuggestLoading] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [createCatOpen, setCreateCatOpen] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -227,6 +229,8 @@ function ItemModal({ open, onClose, categories, editItem }: {
         setLocalImages([]);
       }
       setCatSuggest(null);
+      setCreateCatOpen(false);
+      setNewCatName('');
     }
   }, [open, editItem?.id]);
 
@@ -256,6 +260,8 @@ function ItemModal({ open, onClose, categories, editItem }: {
       void queryClient.invalidateQueries({ queryKey: queryKeys.pantry.categories() });
       setCategoryId(newCat.id);
       setCatSuggest(null);
+      setCreateCatOpen(false);
+      setNewCatName('');
     },
     onError: () => toast.error('Failed to create category'),
   });
@@ -335,7 +341,7 @@ function ItemModal({ open, onClose, categories, editItem }: {
               <button
                 type="button"
                 onClick={suggestPantryCat}
-                disabled={!name.trim() || catSuggestLoading || !!editItem}
+                disabled={!name.trim() || catSuggestLoading}
                 className="flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 transition-colors disabled:opacity-40">
                 {catSuggestLoading
                   ? <Loader2 className="h-3 w-3 animate-spin" />
@@ -343,14 +349,54 @@ function ItemModal({ open, onClose, categories, editItem }: {
                 Suggest
               </button>
             </div>
-            <Select value={categoryId} onValueChange={(v) => { setCategoryId(v); setCatSuggest(null); }}>
+            <Select
+              value={categoryId}
+              onValueChange={(v) => {
+                if (v === '__create__') {
+                  setCreateCatOpen(true);
+                  setCatSuggest(null);
+                } else {
+                  setCategoryId(v);
+                  setCatSuggest(null);
+                  setCreateCatOpen(false);
+                }
+              }}>
               <SelectTrigger className="h-9 w-full text-sm">
                 <SelectValue placeholder="Select a category…" />
               </SelectTrigger>
               <SelectContent>
                 {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                <SelectItem value="__create__"
+                  className="focus:bg-primary/10 focus:text-primary font-medium text-primary">
+                  + Create new category…
+                </SelectItem>
               </SelectContent>
             </Select>
+            {createCatOpen && (
+              <div className="flex items-center gap-2">
+                <Input
+                  className="h-8 text-sm flex-1"
+                  placeholder="Category name…"
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newCatName.trim()) createSuggestedCatMutation.mutate(newCatName.trim());
+                    if (e.key === 'Escape') { setCreateCatOpen(false); setNewCatName(''); }
+                  }}
+                  autoFocus
+                />
+                <Button type="button" size="sm" className="h-8 shrink-0"
+                  disabled={!newCatName.trim() || createSuggestedCatMutation.isPending}
+                  onClick={() => createSuggestedCatMutation.mutate(newCatName.trim())}>
+                  {createSuggestedCatMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Create'}
+                </Button>
+                <button type="button"
+                  onClick={() => { setCreateCatOpen(false); setNewCatName(''); }}
+                  className="shrink-0 text-muted-foreground hover:text-foreground transition-colors">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
             {catSuggest && (
               <div className="flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2">
                 <Sparkles className="h-3 w-3 shrink-0 text-primary/70" />
@@ -378,9 +424,6 @@ function ItemModal({ open, onClose, categories, editItem }: {
                   </button>
                 </div>
               </div>
-            )}
-            {categories.length === 0 && (
-              <p className="text-[10px] text-muted-foreground">Create a category first using the Categories panel.</p>
             )}
           </div>
 

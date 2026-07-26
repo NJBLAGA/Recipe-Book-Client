@@ -275,8 +275,13 @@ function AddItemModal({ open, onClose, categories }: {
   const addImgRef = useRef<HTMLInputElement>(null);
   const [catSuggest, setCatSuggest] = useState<{ suggestion: string; categoryId: string | null } | null>(null);
   const [catSuggestLoading, setCatSuggestLoading] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [createCatOpen, setCreateCatOpen] = useState(false);
 
-  const reset = () => { setName(''); setCategoryId(''); setQuantity(''); setUnit(''); setNote(''); setFiles([]); setCatSuggest(null); };
+  const reset = () => {
+    setName(''); setCategoryId(''); setQuantity(''); setUnit(''); setNote(''); setFiles([]);
+    setCatSuggest(null); setCreateCatOpen(false); setNewCatName('');
+  };
 
   useEffect(() => { if (!open) reset(); }, [open]);
 
@@ -312,6 +317,8 @@ function AddItemModal({ open, onClose, categories }: {
       void queryClient.invalidateQueries({ queryKey: queryKeys.shoppingList.categories() });
       setCategoryId(newCat.id);
       setCatSuggest(null);
+      setCreateCatOpen(false);
+      setNewCatName('');
     },
     onError: () => toast.error('Failed to create category'),
   });
@@ -387,15 +394,53 @@ function AddItemModal({ open, onClose, categories }: {
             </div>
             <Select
               value={categoryId || '__none__'}
-              onValueChange={(v) => { setCategoryId(v === '__none__' ? '' : v); setCatSuggest(null); }}>
+              onValueChange={(v) => {
+                if (v === '__create__') {
+                  setCreateCatOpen(true);
+                  setCatSuggest(null);
+                } else {
+                  setCategoryId(v === '__none__' ? '' : v);
+                  setCatSuggest(null);
+                  setCreateCatOpen(false);
+                }
+              }}>
               <SelectTrigger className="h-9 w-full text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none__">No category</SelectItem>
                 {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                <SelectItem value="__create__"
+                  className="focus:bg-primary/10 focus:text-primary font-medium text-primary">
+                  + Create new category…
+                </SelectItem>
               </SelectContent>
             </Select>
+            {createCatOpen && (
+              <div className="flex items-center gap-2">
+                <Input
+                  className="h-8 text-sm flex-1"
+                  placeholder="Category name…"
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newCatName.trim()) createSuggestedCatMutation.mutate(newCatName.trim());
+                    if (e.key === 'Escape') { setCreateCatOpen(false); setNewCatName(''); }
+                  }}
+                  autoFocus
+                />
+                <Button type="button" size="sm" className="h-8 shrink-0"
+                  disabled={!newCatName.trim() || createSuggestedCatMutation.isPending}
+                  onClick={() => createSuggestedCatMutation.mutate(newCatName.trim())}>
+                  {createSuggestedCatMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Create'}
+                </Button>
+                <button type="button"
+                  onClick={() => { setCreateCatOpen(false); setNewCatName(''); }}
+                  className="shrink-0 text-muted-foreground hover:text-foreground transition-colors">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
             {catSuggest && (
               <div className="flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2">
                 <Sparkles className="h-3 w-3 shrink-0 text-primary/70" />
@@ -535,6 +580,11 @@ function ShoppingListPage() {
   const [editQty, setEditQty] = useState('');
   const [editUnit, setEditUnit] = useState('');
   const [editNote, setEditNote] = useState('');
+  const [editCategoryId, setEditCategoryId] = useState('');
+  const [editCatNewName, setEditCatNewName] = useState('');
+  const [editCatCreateOpen, setEditCatCreateOpen] = useState(false);
+  const [editCatSuggest, setEditCatSuggest] = useState<{ suggestion: string; categoryId: string | null } | null>(null);
+  const [editCatSuggestLoading, setEditCatSuggestLoading] = useState(false);
   const [editImages, setEditImages] = useState<ShoppingItemImage[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
@@ -629,7 +679,7 @@ function ShoppingListPage() {
   });
 
   const updateItemMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: { name?: string; quantity?: number | null; unit?: string | null; note?: string | null } }) =>
+    mutationFn: ({ id, data }: { id: string; data: { name?: string; quantity?: number | null; unit?: string | null; note?: string | null; categoryId?: string | null } }) =>
       api.patch(`/api/shopping-list/items/${id}`, data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.shoppingList.items() });
@@ -649,12 +699,46 @@ function ShoppingListPage() {
     onError: () => toast.error('Failed to delete image'),
   });
 
+  const createEditCatMutation = useMutation({
+    mutationFn: (catName: string) => api.post<ShoppingCategory>('/api/shopping-list/categories', { name: catName }),
+    onSuccess: (newCat) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.shoppingList.categories() });
+      setEditCategoryId(newCat.id);
+      setEditCatSuggest(null);
+      setEditCatCreateOpen(false);
+      setEditCatNewName('');
+    },
+    onError: () => toast.error('Failed to create category'),
+  });
+
+  const suggestEditCat = async () => {
+    const name = editName.trim() || editItem?.name;
+    if (!name || editCatSuggestLoading) return;
+    setEditCatSuggestLoading(true);
+    setEditCatSuggest(null);
+    try {
+      const data = await api.post<{ suggestion: string; categoryId: string | null }>(
+        '/api/suggestions/category',
+        { type: 'shopping-list', name },
+      );
+      setEditCatSuggest(data);
+    } catch {
+      toast.error('Could not suggest a category');
+    } finally {
+      setEditCatSuggestLoading(false);
+    }
+  };
+
   const openEdit = (item: ShoppingItem) => {
     setEditItem(item);
     setEditName(item.name);
     setEditQty(item.quantity != null ? String(item.quantity) : '');
     setEditUnit(item.unit ?? '');
     setEditNote(item.note ?? '');
+    setEditCategoryId(item.categoryId ?? '');
+    setEditCatNewName('');
+    setEditCatCreateOpen(false);
+    setEditCatSuggest(null);
     setEditImages([...item.images]);
   };
 
@@ -667,6 +751,7 @@ function ShoppingListPage() {
         quantity: editQty ? Number(editQty) : null,
         unit: editUnit.trim() || null,
         note: editNote.trim() || null,
+        categoryId: editCategoryId || null,
       },
     });
   };
@@ -1034,6 +1119,98 @@ function ShoppingListPage() {
               <label className="text-xs font-medium text-muted-foreground">Note</label>
               <Textarea className="text-sm resize-none" rows={2} placeholder="Add a note…"
                 value={editNote} onChange={(e) => setEditNote(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-muted-foreground">Category</label>
+                <button
+                  type="button"
+                  onClick={suggestEditCat}
+                  disabled={(!editName.trim() && !editItem?.name) || editCatSuggestLoading}
+                  className="flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 transition-colors disabled:opacity-40">
+                  {editCatSuggestLoading
+                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                    : <Sparkles className="h-3 w-3" />}
+                  Suggest
+                </button>
+              </div>
+              <Select
+                value={editCategoryId || '__none__'}
+                onValueChange={(v) => {
+                  if (v === '__create__') {
+                    setEditCatCreateOpen(true);
+                    setEditCatSuggest(null);
+                  } else {
+                    setEditCategoryId(v === '__none__' ? '' : v);
+                    setEditCatSuggest(null);
+                    setEditCatCreateOpen(false);
+                  }
+                }}>
+                <SelectTrigger className="h-9 w-full text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">No category</SelectItem>
+                  {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  <SelectItem value="__create__"
+                    className="focus:bg-primary/10 focus:text-primary font-medium text-primary">
+                    + Create new category…
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              {editCatCreateOpen && (
+                <div className="flex items-center gap-2">
+                  <Input
+                    className="h-8 text-sm flex-1"
+                    placeholder="Category name…"
+                    value={editCatNewName}
+                    onChange={(e) => setEditCatNewName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && editCatNewName.trim()) createEditCatMutation.mutate(editCatNewName.trim());
+                      if (e.key === 'Escape') { setEditCatCreateOpen(false); setEditCatNewName(''); }
+                    }}
+                    autoFocus
+                  />
+                  <Button type="button" size="sm" className="h-8 shrink-0"
+                    disabled={!editCatNewName.trim() || createEditCatMutation.isPending}
+                    onClick={() => createEditCatMutation.mutate(editCatNewName.trim())}>
+                    {createEditCatMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Create'}
+                  </Button>
+                  <button type="button"
+                    onClick={() => { setEditCatCreateOpen(false); setEditCatNewName(''); }}
+                    className="shrink-0 text-muted-foreground hover:text-foreground transition-colors">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+              {editCatSuggest && (
+                <div className="flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2">
+                  <Sparkles className="h-3 w-3 shrink-0 text-primary/70" />
+                  <p className="flex-1 text-[11px]">
+                    Suggested: <span className="font-semibold">{editCatSuggest.suggestion}</span>
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (editCatSuggest.categoryId) {
+                          setEditCategoryId(editCatSuggest.categoryId);
+                          setEditCatSuggest(null);
+                        } else {
+                          createEditCatMutation.mutate(editCatSuggest.suggestion);
+                        }
+                      }}
+                      disabled={createEditCatMutation.isPending}
+                      className="text-[10px] font-semibold text-primary hover:text-primary/80 transition-colors disabled:opacity-50">
+                      {editCatSuggest.categoryId ? 'Use' : 'Create & use'}
+                    </button>
+                    <button type="button" onClick={() => setEditCatSuggest(null)}
+                      className="text-muted-foreground hover:text-foreground transition-colors">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">Images</label>
