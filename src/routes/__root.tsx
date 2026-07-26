@@ -8,13 +8,13 @@ import { queryClient } from '@/lib/query';
 import { TourProvider } from '@/contexts/TourContext';
 import { TourOverlay } from '@/components/TourOverlay';
 
-interface ErrorBoundaryState { hasError: boolean }
+interface ErrorBoundaryState { hasError: boolean; message: string; stack: string }
 
 class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
-  state = { hasError: false };
+  state = { hasError: false, message: '', stack: '' };
 
-  static getDerivedStateFromError(): ErrorBoundaryState {
-    return { hasError: true };
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, message: error.message ?? String(error), stack: error.stack ?? '' };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
@@ -29,9 +29,12 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
           <p className="text-sm text-muted-foreground max-w-xs">
             An unexpected error occurred. Reload the page to continue.
           </p>
+          <pre className="max-w-xs rounded-lg bg-muted p-3 text-left text-[10px] text-muted-foreground overflow-auto max-h-40 whitespace-pre-wrap break-all">
+            {this.state.message}{this.state.stack ? `\n\n${this.state.stack.slice(0, 600)}` : ''}
+          </pre>
           <button
             className="rounded-lg border px-4 py-2 text-sm hover:bg-accent transition-colors"
-            onClick={() => { this.setState({ hasError: false }); window.location.reload(); }}
+            onClick={() => { this.setState({ hasError: false, message: '', stack: '' }); window.location.reload(); }}
           >
             Reload
           </button>
