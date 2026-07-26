@@ -41,49 +41,67 @@ function isMuted(): boolean {
   try { return localStorage.getItem(MUTE_KEY) === 'true'; } catch { return false; }
 }
 
-function playSound(type: 'done' | 'warning') {
-  if (isMuted()) return;
-  try {
-    const ctx = new AudioContext();
-    const now = ctx.currentTime;
-    if (type === 'done') {
-      const burstDuration = 3 * 0.28;
-      const burstGap = 0.5;
-      for (let rep = 0; rep < 3; rep++) {
-        const repOffset = rep * (burstDuration + burstGap);
-        [880, 1100, 1320].forEach((freq, i) => {
-          const t = now + repOffset + i * 0.28;
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.type = 'sine';
-          osc.frequency.value = freq;
-          gain.gain.setValueAtTime(0.45, t);
-          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
-          osc.start(t);
-          osc.stop(t + 0.28);
-        });
-      }
-    } else {
-      const toneDuration = 0.5;
-      const toneGap = 0.35;
-      for (let rep = 0; rep < 3; rep++) {
-        const t = now + rep * (toneDuration + toneGap);
+// Singleton AudioContext — iOS Safari requires the context to be created and
+// resumed during a user gesture so it can play audio at timer-fire time.
+let audioCtx: AudioContext | null = null;
+
+function ensureAudioContext(): void {
+  if (!audioCtx) {
+    try { audioCtx = new AudioContext(); } catch { return; }
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(() => {});
+  }
+}
+
+function scheduleSound(ctx: AudioContext, type: 'done' | 'warning'): void {
+  const now = ctx.currentTime;
+  if (type === 'done') {
+    const burstDuration = 3 * 0.28;
+    const burstGap = 0.5;
+    for (let rep = 0; rep < 3; rep++) {
+      const repOffset = rep * (burstDuration + burstGap);
+      [880, 1100, 1320].forEach((freq, i) => {
+        const t = now + repOffset + i * 0.28;
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.connect(gain);
         gain.connect(ctx.destination);
         osc.type = 'sine';
-        osc.frequency.value = 660;
-        gain.gain.setValueAtTime(0.3, t);
-        gain.gain.exponentialRampToValueAtTime(0.001, t + toneDuration);
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.45, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
         osc.start(t);
-        osc.stop(t + toneDuration);
-      }
+        osc.stop(t + 0.28);
+      });
     }
-  } catch {
-    // AudioContext not available
+  } else {
+    const toneDuration = 0.5;
+    const toneGap = 0.35;
+    for (let rep = 0; rep < 3; rep++) {
+      const t = now + rep * (toneDuration + toneGap);
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = 660;
+      gain.gain.setValueAtTime(0.3, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + toneDuration);
+      osc.start(t);
+      osc.stop(t + toneDuration);
+    }
+  }
+}
+
+function playSound(type: 'done' | 'warning') {
+  if (isMuted()) return;
+  const ctx = audioCtx;
+  if (!ctx) return;
+  if (ctx.state !== 'running') {
+    ctx.resume().then(() => scheduleSound(ctx, type)).catch(() => {});
+  } else {
+    scheduleSound(ctx, type);
   }
 }
 
@@ -218,6 +236,9 @@ export function useTimer() {
   const start = useCallback(
     async (durationMs: number, label: string, reminders: number[] = []) => {
       if (durationMs <= 0) return;
+      // Unlock AudioContext while we're in a user gesture — iOS requires this
+      // so the context is running by the time the timer fires.
+      ensureAudioContext();
       try {
         const durationSec = Math.ceil(durationMs / 1000);
         const timer = await api.post<{ id: string; fireAt: string }>('/api/push/timers', {

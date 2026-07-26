@@ -27,7 +27,7 @@ interface PantryCategory { id: string; name: string; pantryId: string; }
 interface PantryItem {
   id: string; pantryId: string; ingredientId: string; ingredientName: string;
   categoryId: string | null; categoryName: string | null;
-  inStock: boolean;
+  stockStatus: 'in_stock' | 'low_stock' | 'out_of_stock';
   quantity: number | null; unit: string | null; notes: string | null;
   images: Array<{ id: string; url: string; sortOrder: number }>;
 }
@@ -197,7 +197,7 @@ function ItemModal({ open, onClose, categories, editItem }: {
   const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [categoryId, setCategoryId] = useState('');
-  const [inStock, setInStock] = useState(true);
+  const [stockStatus, setStockStatus] = useState<'in_stock' | 'low_stock' | 'out_of_stock'>('in_stock');
   const [quantity, setQuantity] = useState('');
   const [unit, setUnit] = useState('');
   const [notes, setNotes] = useState('');
@@ -214,7 +214,7 @@ function ItemModal({ open, onClose, categories, editItem }: {
       if (editItem) {
         setName(editItem.ingredientName);
         setCategoryId(editItem.categoryId ?? '');
-        setInStock(editItem.inStock);
+        setStockStatus(editItem.stockStatus);
         setQuantity(editItem.quantity ? String(editItem.quantity) : '');
         setUnit(editItem.unit ?? '');
         setNotes(editItem.notes ?? '');
@@ -222,7 +222,7 @@ function ItemModal({ open, onClose, categories, editItem }: {
       } else {
         setName('');
         setCategoryId(categories[0]?.id ?? '');
-        setInStock(true);
+        setStockStatus('in_stock');
         setQuantity('');
         setUnit('');
         setNotes('');
@@ -238,7 +238,7 @@ function ItemModal({ open, onClose, categories, editItem }: {
     mutationFn: () => {
       const body = {
         categoryId: categoryId || undefined,
-        inStock,
+        stockStatus,
         quantity: quantity ? parseInt(quantity, 10) : null,
         unit: unit.trim() || null,
         notes: notes.trim() || null,
@@ -429,15 +429,20 @@ function ItemModal({ open, onClose, categories, editItem }: {
 
           <div className="space-y-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Stock Status</label>
-            <div className="flex items-center gap-2 rounded-xl border p-0.5 bg-muted/30 w-fit">
-              <button type="button" onClick={() => setInStock(true)}
-                className={cn('px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors',
-                  inStock ? 'bg-emerald-500 text-white' : 'text-muted-foreground hover:text-foreground')}>
+            <div className="flex items-center gap-1 rounded-xl border p-0.5 bg-muted/30 w-fit">
+              <button type="button" onClick={() => setStockStatus('in_stock')}
+                className={cn('px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors',
+                  stockStatus === 'in_stock' ? 'bg-emerald-500 text-white' : 'text-muted-foreground hover:text-foreground')}>
                 In Stock
               </button>
-              <button type="button" onClick={() => setInStock(false)}
-                className={cn('px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors',
-                  !inStock ? 'bg-rose-500 text-white' : 'text-muted-foreground hover:text-foreground')}>
+              <button type="button" onClick={() => setStockStatus('low_stock')}
+                className={cn('px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors',
+                  stockStatus === 'low_stock' ? 'bg-amber-500 text-white' : 'text-muted-foreground hover:text-foreground')}>
+                Low Stock
+              </button>
+              <button type="button" onClick={() => setStockStatus('out_of_stock')}
+                className={cn('px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors',
+                  stockStatus === 'out_of_stock' ? 'bg-rose-500 text-white' : 'text-muted-foreground hover:text-foreground')}>
                 Out of Stock
               </button>
             </div>
@@ -535,7 +540,7 @@ function ItemDetailModal({ item, open, onClose, onEdit }: {
   });
 
   const toggleStockMutation = useMutation({
-    mutationFn: (inStock: boolean) => api.patch(`/api/pantry/items/${item!.id}`, { inStock }),
+    mutationFn: (s: 'in_stock' | 'low_stock' | 'out_of_stock') => api.patch(`/api/pantry/items/${item!.id}`, { stockStatus: s }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.pantry.items() });
     },
@@ -621,28 +626,37 @@ function ItemDetailModal({ item, open, onClose, onEdit }: {
               )}
 
               {/* Stock toggle */}
-              <div className="rounded-xl border bg-muted/30 p-3 space-y-3">
+              <div className="rounded-xl border bg-muted/30 p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold">Stock Status</span>
                   <span className={cn('text-xs font-bold flex items-center gap-1.5',
-                    item.inStock ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500')}>
-                    <span className={cn('h-2 w-2 rounded-full', item.inStock ? 'bg-emerald-500' : 'bg-rose-500')} />
-                    {item.inStock ? 'In Stock' : 'Out of Stock'}
+                    item.stockStatus === 'in_stock' ? 'text-emerald-600 dark:text-emerald-400'
+                    : item.stockStatus === 'low_stock' ? 'text-amber-600 dark:text-amber-400'
+                    : 'text-rose-500')}>
+                    <span className={cn('h-2 w-2 rounded-full',
+                      item.stockStatus === 'in_stock' ? 'bg-emerald-500'
+                      : item.stockStatus === 'low_stock' ? 'bg-amber-500'
+                      : 'bg-rose-500')} />
+                    {item.stockStatus === 'in_stock' ? 'In Stock' : item.stockStatus === 'low_stock' ? 'Low Stock' : 'Out of Stock'}
                   </span>
                 </div>
-                <button type="button"
-                  onClick={() => toggleStockMutation.mutate(!item.inStock)}
-                  disabled={toggleStockMutation.isPending}
-                  className={cn(
-                    'w-full flex items-center justify-center gap-2 rounded-lg border py-2 text-xs font-semibold transition-colors',
-                    item.inStock
-                      ? 'border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-400 dark:hover:bg-rose-950'
-                      : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950',
-                  )}>
-                  {toggleStockMutation.isPending
-                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    : item.inStock ? 'Mark as Out of Stock' : <><Check className="h-3.5 w-3.5" />Mark as In Stock</>}
-                </button>
+                <div className="flex items-center gap-1 rounded-xl border p-0.5 bg-background/60 w-full">
+                  {(['in_stock', 'low_stock', 'out_of_stock'] as const).map((s) => (
+                    <button key={s} type="button"
+                      onClick={() => toggleStockMutation.mutate(s)}
+                      disabled={toggleStockMutation.isPending || item.stockStatus === s}
+                      className={cn('flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors',
+                        item.stockStatus === s
+                          ? s === 'in_stock' ? 'bg-emerald-500 text-white'
+                            : s === 'low_stock' ? 'bg-amber-500 text-white'
+                            : 'bg-rose-500 text-white'
+                          : 'text-muted-foreground hover:text-foreground')}>
+                      {toggleStockMutation.isPending && item.stockStatus === s
+                        ? <Loader2 className="h-3 w-3 animate-spin mx-auto" />
+                        : s === 'in_stock' ? 'In Stock' : s === 'low_stock' ? 'Low Stock' : 'Out of Stock'}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Quantity / unit */}
@@ -965,7 +979,10 @@ function IngredientSearchPanel({ open, onClose, pantryItems, onOpenRecipe }: {
                       {isSelected && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
                     </span>
                     <span className="flex-1 text-sm font-medium">{item.ingredientName}</span>
-                    <span className={cn('h-2 w-2 rounded-full shrink-0', item.inStock ? 'bg-emerald-500' : 'bg-rose-500')} />
+                    <span className={cn('h-2 w-2 rounded-full shrink-0',
+                      item.stockStatus === 'in_stock' ? 'bg-emerald-500'
+                      : item.stockStatus === 'low_stock' ? 'bg-amber-500'
+                      : 'bg-rose-500')} />
                   </button>
                 );
               })}
@@ -1065,12 +1082,15 @@ function PantryItemCard({ item, onClick }: { item: PantryItem; onClick: () => vo
         <p className="text-sm font-semibold leading-snug line-clamp-1">{item.ingredientName}</p>
         <span className={cn(
           'inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none',
-          item.inStock
-            ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-            : 'bg-rose-500/15 text-rose-600 dark:text-rose-400',
+          item.stockStatus === 'in_stock' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+          : item.stockStatus === 'low_stock' ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+          : 'bg-rose-500/15 text-rose-600 dark:text-rose-400',
         )}>
-          <span className={cn('h-1 w-1 rounded-full shrink-0', item.inStock ? 'bg-emerald-500' : 'bg-rose-500')} />
-          {item.inStock ? 'In Stock' : 'Out of Stock'}
+          <span className={cn('h-1 w-1 rounded-full shrink-0',
+            item.stockStatus === 'in_stock' ? 'bg-emerald-500'
+            : item.stockStatus === 'low_stock' ? 'bg-amber-500'
+            : 'bg-rose-500')} />
+          {item.stockStatus === 'in_stock' ? 'In Stock' : item.stockStatus === 'low_stock' ? 'Low Stock' : 'Out of Stock'}
         </span>
         {item.notes && (
           <p className="text-[10px] text-muted-foreground line-clamp-1">{item.notes}</p>
@@ -1138,7 +1158,7 @@ function CategoryGroup({ label, items, onItemClick }: {
 function PantryPage() {
   const navigate = useNavigate();
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
-  const [stockFilter, setStockFilter] = useState<'all' | 'in' | 'out'>('all');
+  const [stockFilter, setStockFilter] = useState<'all' | 'in' | 'low' | 'out'>('all');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<PantryItem | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -1161,8 +1181,9 @@ function PantryPage() {
 
   const filteredItems = items.filter((item) => {
     if (activeCategoryId && item.categoryId !== activeCategoryId) return false;
-    if (stockFilter === 'in' && !item.inStock) return false;
-    if (stockFilter === 'out' && item.inStock) return false;
+    if (stockFilter === 'in' && item.stockStatus !== 'in_stock') return false;
+    if (stockFilter === 'low' && item.stockStatus !== 'low_stock') return false;
+    if (stockFilter === 'out' && item.stockStatus !== 'out_of_stock') return false;
     if (pantrySearch.trim() && !item.ingredientName.toLowerCase().includes(pantrySearch.toLowerCase().trim())) return false;
     return true;
   });
@@ -1276,6 +1297,7 @@ function PantryPage() {
                   {([
                     { id: 'all' as const, label: 'All' },
                     { id: 'in' as const, label: 'In Stock' },
+                    { id: 'low' as const, label: 'Low Stock' },
                     { id: 'out' as const, label: 'Out of Stock' },
                   ] as const).map(({ id, label }) => (
                     <button key={id} type="button" onClick={() => setStockFilter(id)}

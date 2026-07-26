@@ -66,7 +66,7 @@ interface CookHistoryEntry {
 
 interface PantryItemSummary {
   id: string; ingredientId: string; ingredientName: string;
-  inStock: boolean; quantity: number | null; unit: string | null; notes: string | null;
+  stockStatus: 'in_stock' | 'low_stock' | 'out_of_stock'; quantity: number | null; unit: string | null; notes: string | null;
   images: { id: string; url: string; sortOrder: number }[];
 }
 
@@ -88,7 +88,7 @@ interface UserProfile {
 }
 
 interface PantryChange {
-  inStock: boolean; quantity: number | null; unit: string | null; notes: string | null;
+  stockStatus: 'in_stock' | 'low_stock' | 'out_of_stock'; quantity: number | null; unit: string | null; notes: string | null;
 }
 
 interface CookSession {
@@ -98,8 +98,8 @@ interface CookSession {
   pendingChanges: {
     ticked: string[];
     tickedSteps: number[];
-    pantryChanges: { itemId: string; inStock: boolean }[];
-    extraChanges: { itemId: string; inStock: boolean }[];
+    pantryChanges: { itemId: string; stockStatus: string }[];
+    extraChanges: { itemId: string; stockStatus: string }[];
   } | null;
   resumed: boolean;
 }
@@ -148,14 +148,11 @@ function convertQty(qty: string | null, unit: string | null, system: MeasureSyst
   if (system === 'imperial') {
     if (unit === 'g')  return { qty: round(n * 0.03527), unit: 'oz' };
     if (unit === 'kg') return { qty: round(n * 2.20462), unit: 'lb' };
-    if (unit === 'ml') return { qty: round(n * 0.00422675), unit: 'cups' };
-    if (unit === 'L')  return { qty: round(n * 4.22675), unit: 'cups' };
     if (unit === '°C') return { qty: round(n * 9 / 5 + 32), unit: '°F' };
   } else {
-    if (unit === 'oz')   return { qty: round(n * 28.3495), unit: 'g' };
-    if (unit === 'lb')   return { qty: round(n * 453.592), unit: 'g' };
-    if (unit === 'cups') return { qty: round(n * 236.588), unit: 'ml' };
-    if (unit === '°F')   return { qty: round((n - 32) * 5 / 9), unit: '°C' };
+    if (unit === 'oz') return { qty: round(n * 28.3495), unit: 'g' };
+    if (unit === 'lb') return { qty: round(n * 453.592), unit: 'g' };
+    if (unit === '°F') return { qty: round((n - 32) * 5 / 9), unit: '°C' };
   }
   return { qty, unit };
 }
@@ -187,14 +184,17 @@ function simplifyIngredientName(name: string): string {
   return words.slice(start).join(' ');
 }
 
-function pantryStatus(ingredientId: string, pantryMap: Map<string, boolean>): 'in-stock' | 'missing' {
-  return pantryMap.get(ingredientId) ? 'in-stock' : 'missing';
+function pantryStatus(ingredientId: string, pantryMap: Map<string, string>): 'in-stock' | 'low-stock' | 'missing' {
+  const s = pantryMap.get(ingredientId);
+  if (s === 'in_stock') return 'in-stock';
+  if (s === 'low_stock') return 'low-stock';
+  return 'missing';
 }
 
-function PantryIcon({ status }: { status: 'in-stock' | 'missing' }) {
-  return status === 'in-stock'
-    ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
-    : <XCircle className="h-4 w-4 shrink-0 text-rose-500" />;
+function PantryIcon({ status }: { status: 'in-stock' | 'low-stock' | 'missing' }) {
+  if (status === 'in-stock') return <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />;
+  if (status === 'low-stock') return <AlertCircle className="h-4 w-4 shrink-0 text-amber-500" />;
+  return <XCircle className="h-4 w-4 shrink-0 text-rose-500" />;
 }
 
 // Apply Cloudinary delivery transforms so uploaded images are served at a
@@ -1388,7 +1388,7 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
     }
   }, [activeSession]);
 
-  const pantryMap = new Map(pantryItems.map((p) => [p.ingredientId, p.inStock]));
+  const pantryMap = new Map(pantryItems.map((p) => [p.ingredientId, p.stockStatus]));
   const pantryByIngredientId = new Map(pantryItems.map((p) => [p.ingredientId, p]));
 
   const { data: shoppingListItems = [] } = useQuery({
@@ -1585,7 +1585,7 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
     for (const ingId of localTicked) {
       const pi = pantryByIngredientId.get(ingId);
       if (pi) {
-        initial[pi.id] = { inStock: pi.inStock, quantity: pi.quantity, unit: pi.unit, notes: pi.notes };
+        initial[pi.id] = { stockStatus: pi.stockStatus, quantity: pi.quantity, unit: pi.unit, notes: pi.notes };
       }
     }
     setPendingStockChanges(initial);
@@ -1616,7 +1616,7 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
     setCompleting(true);
     try {
       const pantryChanges = Object.entries(pendingStockChanges).map(([itemId, ch]) => ({
-        itemId, inStock: ch.inStock, quantity: ch.quantity, unit: ch.unit, notes: ch.notes,
+        itemId, stockStatus: ch.stockStatus, quantity: ch.quantity, unit: ch.unit, notes: ch.notes,
       }));
       await api.post(`/api/cook-sessions/${cookSession.id}/complete`, { pantryChanges });
 
@@ -2065,7 +2065,7 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
                     <p className="text-[11px] text-muted-foreground">Confirm the stock status after cooking.</p>
                     {pantryIngredients.map((ing) => {
                       const pi = pantryByIngredientId.get(ing.ingredientId)!;
-                      const ch = pendingStockChanges[pi.id] ?? { inStock: pi.inStock, quantity: pi.quantity, unit: pi.unit, notes: pi.notes };
+                      const ch = pendingStockChanges[pi.id] ?? { stockStatus: pi.stockStatus, quantity: pi.quantity, unit: pi.unit, notes: pi.notes };
                       const set = (patch: Partial<PantryChange>) => setPendingStockChanges((p) => ({ ...p, [pi.id]: { ...ch, ...patch } }));
                       const shopOn = !!pantryShopToggles[pi.id];
                       const sd = pantryShopDetails[pi.id] ?? { qty: '', unit: '', note: '' };
@@ -2085,15 +2085,20 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
                               <ShoppingCart className="h-3.5 w-3.5" />
                             </button>
                           </div>
-                          <div className="flex items-center gap-2 rounded-xl border p-0.5 bg-muted/30 w-fit">
-                            <button type="button" onClick={() => set({ inStock: true })}
-                              className={cn('px-3 py-1 rounded-lg text-xs font-semibold transition-colors',
-                                ch.inStock ? 'bg-green-500 text-white' : 'text-muted-foreground hover:text-foreground')}>
+                          <div className="flex items-center gap-1 rounded-xl border p-0.5 bg-muted/30 w-fit">
+                            <button type="button" onClick={() => set({ stockStatus: 'in_stock' })}
+                              className={cn('px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors',
+                                ch.stockStatus === 'in_stock' ? 'bg-emerald-500 text-white' : 'text-muted-foreground hover:text-foreground')}>
                               In Stock
                             </button>
-                            <button type="button" onClick={() => set({ inStock: false })}
-                              className={cn('px-3 py-1 rounded-lg text-xs font-semibold transition-colors',
-                                !ch.inStock ? 'bg-red-500 text-white' : 'text-muted-foreground hover:text-foreground')}>
+                            <button type="button" onClick={() => set({ stockStatus: 'low_stock' })}
+                              className={cn('px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors',
+                                ch.stockStatus === 'low_stock' ? 'bg-amber-500 text-white' : 'text-muted-foreground hover:text-foreground')}>
+                              Low Stock
+                            </button>
+                            <button type="button" onClick={() => set({ stockStatus: 'out_of_stock' })}
+                              className={cn('px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors',
+                                ch.stockStatus === 'out_of_stock' ? 'bg-rose-500 text-white' : 'text-muted-foreground hover:text-foreground')}>
                               Out of Stock
                             </button>
                           </div>
@@ -2306,7 +2311,7 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
             </div>
             {shopModal.pantryItem && (
               <p className="text-[11px] text-muted-foreground">
-                Current pantry stock: {shopModal.pantryItem.inStock ? 'in stock' : 'out of stock'}
+                Current pantry stock: {shopModal.pantryItem.stockStatus === 'in_stock' ? 'in stock' : shopModal.pantryItem.stockStatus === 'low_stock' ? 'low stock' : 'out of stock'}
               </p>
             )}
             <div className="space-y-1">
