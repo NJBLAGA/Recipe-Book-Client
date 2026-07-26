@@ -119,7 +119,7 @@ function AppLayout() {
     ? navItems.filter((item) => item.to === '/profile')
     : navItems;
 
-  const navItems = visibleNavItems.map(({ to, label, shortLabel, icon: Icon, exact }) => {
+  const navLinks = visibleNavItems.map(({ to, label, shortLabel, icon: Icon, exact }) => {
     const active = exact ? pathname === to : pathname.startsWith(to);
     const showAvatar = to === '/profile' && !!me?.image;
     return (
@@ -169,7 +169,7 @@ function AppLayout() {
               className="mx-auto flex max-w-4xl items-center justify-around px-2 pb-1.5 sm:px-4 sm:pb-2 lg:px-8"
               style={{ paddingTop: 'calc(env(safe-area-inset-top) + 6px)' }}
             >
-              {navItems}
+              {navLinks}
             </div>
           </nav>
         )}
@@ -188,7 +188,7 @@ function AppLayout() {
               className="mx-auto flex max-w-4xl items-center justify-around px-2 pt-1.5 sm:px-4 sm:pt-2 lg:px-8"
               style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 6px)' }}
             >
-              {navItems}
+              {navLinks}
             </div>
           </nav>
         )}
