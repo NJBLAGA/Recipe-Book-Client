@@ -162,8 +162,8 @@ function TimeBadges({ prepTime, cookTime }: { prepTime?: number | null; cookTime
   if (!prep && !cook) return null;
   return (
     <div className="flex items-center gap-4 flex-wrap">
-      {prep && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="h-3.5 w-3.5 text-primary shrink-0" /><span className="font-medium text-foreground">Prep:</span>{prep}</span>}
-      {cook && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="h-3.5 w-3.5 text-amber-500 shrink-0" /><span className="font-medium text-foreground">Cook:</span>{cook}</span>}
+      {prep && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="h-3.5 w-3.5 text-primary dark:text-amber-500 shrink-0" /><span className="font-medium text-foreground">Prep:</span>{prep}</span>}
+      {cook && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="h-3.5 w-3.5 text-primary dark:text-amber-500 shrink-0" /><span className="font-medium text-foreground">Cook:</span>{cook}</span>}
     </div>
   );
 }
