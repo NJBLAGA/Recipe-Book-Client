@@ -1258,7 +1258,7 @@ function CreatePostModal({ open, onClose }: { open: boolean; onClose: () => void
         'w-[calc(100vw-48px)] mx-auto',
         step === 'preview'
           ? 'max-w-lg p-0 gap-0 overflow-hidden flex flex-col max-h-[85vh]'
-          : 'max-w-lg max-h-[85vh] overflow-hidden'
+          : 'max-w-lg max-h-[85vh] overflow-hidden flex flex-col'
       )}>
         {step !== 'preview' && (
           <DialogHeader>
@@ -1267,7 +1267,7 @@ function CreatePostModal({ open, onClose }: { open: boolean; onClose: () => void
         )}
 
         {step === 'recipe' && (
-          <div className="space-y-4">
+          <div className="space-y-4 min-w-0 w-full">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input className="h-10 pl-9" placeholder="Search your recipes…"

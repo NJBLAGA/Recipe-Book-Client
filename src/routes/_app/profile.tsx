@@ -1239,7 +1239,7 @@ function RecipeSelectModal({ open, onClose, onSelect, excludeIds }: {
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent className="w-[calc(100vw-32px)] max-w-lg">
+      <DialogContent className="w-[calc(100vw-32px)] max-w-lg overflow-hidden">
         <DialogHeader>
           <DialogTitle>Select Recipe</DialogTitle>
         </DialogHeader>
