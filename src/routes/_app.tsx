@@ -41,7 +41,7 @@ function useIsIOSSafariBrowser() {
 
 function Spinner() {
   return (
-    <div className="flex min-h-svh items-center justify-center">
+    <div className="flex h-dvh items-center justify-center">
       <div className="border-primary/30 h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" />
     </div>
   );
@@ -162,9 +162,9 @@ function AppLayout() {
     <TimerProvider>
       <TimerDialog />
       <FloatingTimer />
-      <div className="flex min-h-svh flex-col">
+      <div className="flex h-dvh flex-col">
         {isTopNav && (
-          <nav className="bg-background/95 border-b fixed top-0 left-0 right-0 z-50 supports-[backdrop-filter]:backdrop-blur-sm">
+          <nav className="shrink-0 bg-background/95 border-b z-50 supports-[backdrop-filter]:backdrop-blur-sm">
             <div
               className="mx-auto flex max-w-4xl items-center justify-around px-2 pb-1.5 sm:px-4 sm:pb-2 lg:px-8"
               style={{ paddingTop: 'calc(env(safe-area-inset-top) + 6px)' }}
@@ -174,16 +174,13 @@ function AppLayout() {
           </nav>
         )}
         <main
-          className="flex-1"
-          style={isTopNav
-            ? { paddingTop: 'calc(env(safe-area-inset-top) + 3.5rem)' }
-            : { paddingBottom: 'calc(3.5rem + env(safe-area-inset-bottom))' }
-          }
+          className="flex-1 overflow-y-auto scrollbar-hide"
+          style={isTopNav ? undefined : { paddingTop: 'env(safe-area-inset-top)' }}
         >
           <Outlet />
         </main>
         {!isTopNav && (
-          <nav className="bg-background/95 border-t fixed bottom-0 left-0 right-0 z-50 supports-[backdrop-filter]:backdrop-blur-sm">
+          <nav className="shrink-0 bg-background/95 border-t z-50 supports-[backdrop-filter]:backdrop-blur-sm">
             <div
               className="mx-auto flex max-w-4xl items-center justify-around px-2 pt-1.5 sm:px-4 sm:pt-2 lg:px-8"
               style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 6px)' }}
