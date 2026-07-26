@@ -65,7 +65,7 @@ type DemoPage = 'welcome' | 'navbar' | 'recipes' | 'pantry' | 'shopping' | 'comm
 interface TourStep { page: DemoPage; title: string; content: string; highlight?: string }
 
 const TOUR_STEPS: TourStep[] = [
-  { page: 'welcome', title: 'Welcome to Recipe Book', content: 'Your household\'s all-in-one cooking companion — shared recipe book, pantry, and shopping list. Let\'s take a quick look around.' },
+  { page: 'welcome', title: 'Welcome to The Shared Pantry Experience', content: 'Your household\'s all-in-one cooking companion — shared recipe book, pantry, and shopping list. Let\'s take a quick look around.' },
   { page: 'navbar',  title: 'Finding your way around', content: 'Five sections live in the navigation bar at the bottom. Tap any icon to jump straight there — it\'s always visible, no matter where you are in the app.' },
   { page: 'recipes', title: 'Your Recipe Book', content: 'One shared recipe book for the whole household. Add recipes manually, scan cookbook pages, or import from a URL — all three land in the same review form.', highlight: 'recipe-list' },
   { page: 'recipes', title: 'Organise with categories', content: 'Create your own categories — Weeknight Dinners, Desserts, Christmas Specials — to keep the book tidy. Every recipe shows its live pantry status at a glance.', highlight: 'categories' },
@@ -748,7 +748,7 @@ function DemoWelcome() {
         <BookOpenText className="h-10 w-10 text-primary-foreground" />
       </div>
       <div className="space-y-2">
-        <h1 className="text-2xl font-bold">Welcome to Recipe Book</h1>
+        <h1 className="text-2xl font-bold">Welcome to The Shared Pantry Experience</h1>
         <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
           Shared recipes, pantry tracking, and shopping lists — built for households.
         </p>

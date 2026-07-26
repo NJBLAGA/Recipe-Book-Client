@@ -1043,9 +1043,10 @@ function PinViewModal({ slot, open, onClose }: { slot: PinSlot; open: boolean; o
           <span className="sr-only">Close</span>
         </DialogClose>
 
+        <div className="scrollbar-hide overflow-y-auto flex-1">
         {/* Image carousel */}
         {images.length > 0 && (
-          <div className="relative shrink-0 bg-muted">
+          <div className="relative bg-muted">
             <img src={images[imageIdx]?.url} alt={slot.recipeTitle} className="w-full h-48 object-cover" />
             <button type="button" onClick={() => setLightboxIdx(imageIdx)}
               className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-white text-[10px] font-medium hover:bg-black/70 transition-colors z-10">
@@ -1074,7 +1075,7 @@ function PinViewModal({ slot, open, onClose }: { slot: PinSlot; open: boolean; o
 
         {/* Title + controls */}
         {recipe && (
-          <div className="shrink-0 px-4 pt-4 pb-3 border-b space-y-2.5">
+          <div className="px-4 pt-4 pb-3 border-b space-y-2.5">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-bold leading-tight">{recipe.title}</h2>
@@ -1115,7 +1116,7 @@ function PinViewModal({ slot, open, onClose }: { slot: PinSlot; open: boolean; o
         )}
 
         {recipe && (
-          <div className="scrollbar-hide overflow-y-auto flex-1 px-4 py-4 space-y-5">
+          <div className="px-4 py-4 space-y-5">
             {recipe.ingredients.length > 0 && (
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ingredients</p>
@@ -1171,6 +1172,7 @@ function PinViewModal({ slot, open, onClose }: { slot: PinSlot; open: boolean; o
             )}
           </div>
         )}
+        </div>
 
         {lightboxIdx !== null && images[lightboxIdx] && (
           <div className="absolute inset-0 z-[100] flex items-center justify-center bg-background/95 backdrop-blur-sm"
@@ -1640,8 +1642,9 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
           <X className="h-4 w-4" /><span className="sr-only">Close</span>
         </DialogClose>
 
+        <div className="scrollbar-hide overflow-y-auto flex-1">
         {images.length > 0 && (
-          <div className="relative shrink-0 bg-muted">
+          <div className="relative bg-muted">
             <img src={images[imgIdx]?.url} alt={target.recipeTitle ?? ''} className="w-full h-48 object-cover" />
             <button type="button" onClick={() => setLightboxIdx(imgIdx)}
               className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-white text-[10px] font-medium hover:bg-black/70 transition-colors z-10">
@@ -1663,7 +1666,7 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
         )}
 
         {detail && (
-          <div className="shrink-0 px-4 pt-4 pb-3 border-b space-y-2.5">
+          <div className="px-4 pt-4 pb-3 border-b space-y-2.5">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-bold leading-tight">{detail.title}</h2>
@@ -1778,6 +1781,7 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
               )}
             </>
           )}
+        </div>
         </div>
 
         {!isOwnRecipe && !target.sameHousehold && (
@@ -2492,8 +2496,9 @@ function ShareRecipeViewModal({ share, open, onClose, onCopy, meId }: {
           <X className="h-4 w-4" /><span className="sr-only">Close</span>
         </DialogClose>
 
+        <div className="overflow-y-auto flex-1">
         {images.length > 0 && (
-          <div className="relative w-full h-48 shrink-0 bg-muted overflow-hidden">
+          <div className="relative w-full h-48 bg-muted overflow-hidden">
             <img src={images[imgIdx].url} alt={share.recipeTitle ?? ''} className="w-full h-full object-cover" />
             <button type="button" onClick={() => setLightboxIdx(imgIdx)}
               className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-white text-[10px] font-medium hover:bg-black/70 transition-colors z-10">
@@ -2520,7 +2525,7 @@ function ShareRecipeViewModal({ share, open, onClose, onCopy, meId }: {
           </div>
         )}
 
-        <div className="p-5 space-y-4 overflow-y-auto">
+        <div className="p-5 space-y-4">
           <div className="space-y-1">
             <div className="flex items-start justify-between gap-2">
               <h2 className="text-base font-bold leading-tight">{share.recipeTitle ?? 'Untitled Recipe'}</h2>
@@ -2643,6 +2648,7 @@ function ShareRecipeViewModal({ share, open, onClose, onCopy, meId }: {
           <Button className="w-full gap-2" size="sm" onClick={() => { onClose(); onCopy(share, detail ?? null); }}>
             <Copy className="h-3.5 w-3.5" />Save a Copy
           </Button>
+        </div>
         </div>
 
         {lightboxIdx !== null && images[lightboxIdx] && (

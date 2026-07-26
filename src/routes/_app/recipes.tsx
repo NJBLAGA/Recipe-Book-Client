@@ -1672,8 +1672,9 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
           <X className="h-4 w-4" />
         </DialogClose>
 
+        <div className="flex-1 overflow-y-auto scrollbar-hide">
         {images.length > 0 ? (
-          <div className="shrink-0 px-4 pt-4 pb-1 bg-background">
+          <div className="px-4 pt-4 pb-1 bg-background">
             <div className="relative h-44 rounded-xl overflow-hidden bg-muted">
               <img src={cloudinaryUrl(images[imgIdx].url, 800)} alt="" className="h-full w-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
@@ -1703,12 +1704,11 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
             </div>
           </div>
         ) : (
-          <div className="shrink-0 h-10" />
+          <div className="h-10" />
         )}
 
-        {/* ── Title + edit/delete — outside scroll so the Slider can't push it off ── */}
         {!isLoading && recipe && (
-          <div className="shrink-0 px-4 pt-4 pb-3 border-b space-y-2.5">
+          <div className="px-4 pt-4 pb-3 border-b space-y-2.5">
             <div className="flex items-start gap-2">
               <h2 className="flex-1 font-bold text-xl leading-tight">{recipe.title}</h2>
               {!isCooking && (
@@ -1767,9 +1767,8 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
           </div>
         )}
 
-        {/* ── Cook in-progress banner — outside scroll ── */}
         {!isLoading && recipe && isCooking && (
-          <div className="shrink-0 mx-4 mt-3 flex items-center gap-2 rounded-xl bg-primary/10 border border-primary/20 px-3 py-2">
+          <div className="mx-4 mt-3 flex items-center gap-2 rounded-xl bg-primary/10 border border-primary/20 px-3 py-2">
             <ChefHat className="h-4 w-4 text-primary shrink-0" />
             <p className="text-xs font-semibold text-primary flex-1">
               {cookSession?.resumed ? 'Resuming cook session' : 'Cooking in progress'}
@@ -1778,9 +1777,8 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
           </div>
         )}
 
-        {/* ── Servings + metric — outside scroll, no focusable element inside scroll ── */}
         {!isLoading && recipe && !isCooking && (
-          <div className="shrink-0 px-4 pt-3 pb-4 border-b">
+          <div className="px-4 pt-3 pb-4 border-b">
             <div className="rounded-xl border bg-muted/30 p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold">Servings</span>
@@ -1817,16 +1815,14 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
           </div>
         )}
 
-        {/* ── Loading ── */}
         {isLoading && (
-          <div className="flex-1 flex items-center justify-center py-12">
+          <div className="flex items-center justify-center py-12">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary/30 border-t-transparent" />
           </div>
         )}
 
-        {/* ── Scrollable content: pantry legend + ingredients + steps + cook button ── */}
         {!isLoading && recipe && (
-          <div className="flex-1 overflow-y-auto scrollbar-hide">
+          <div>
             <div className="p-4 space-y-5">
               {!isCooking && (
                 <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
@@ -1957,6 +1953,7 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
             </div>
           </div>
         )}
+        </div>
 
         {/* Cook footer — cancel + complete */}
         {isCooking && !confirmDelete && (

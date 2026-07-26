@@ -460,8 +460,9 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
           <X className="h-4 w-4" /><span className="sr-only">Close</span>
         </DialogClose>
 
+        <div className="scrollbar-hide overflow-y-auto flex-1">
         {images.length > 0 && (
-          <div className="relative shrink-0 bg-muted">
+          <div className="relative bg-muted">
             <img src={images[imgIdx]?.url} alt={target.recipeTitle ?? ''} className="w-full h-48 object-cover" />
             <button type="button" onClick={() => setLightboxIdx(imgIdx)}
               className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-white text-[10px] font-medium hover:bg-black/70 transition-colors z-10">
@@ -489,7 +490,7 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
         )}
 
         {detail && (
-          <div className="shrink-0 px-4 pt-4 pb-3 border-b space-y-2.5">
+          <div className="px-4 pt-4 pb-3 border-b space-y-2.5">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-bold leading-tight">{detail.title}</h2>
@@ -523,7 +524,7 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
           </div>
         )}
 
-        <div className="scrollbar-hide overflow-y-auto flex-1 px-4 py-4 space-y-5">
+        <div className="px-4 py-4 space-y-5">
           {detailLoading && <div className="flex justify-center py-8"><div className="h-5 w-5 animate-spin rounded-full border-2 border-primary/30 border-t-transparent" /></div>}
 
           {detail && (
@@ -602,6 +603,7 @@ function PublicPinViewModal({ target, meId, open, onClose }: {
               )}
             </>
           )}
+        </div>
         </div>
 
         {!isOwnRecipe && !isHousehold && (
@@ -959,9 +961,10 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
           <span className="sr-only">Close</span>
         </DialogClose>
 
+        <div className="scrollbar-hide overflow-y-auto flex-1">
         {/* Image carousel */}
         {images.length > 0 && (
-          <div className="relative shrink-0 bg-muted">
+          <div className="relative bg-muted">
             <img src={images[imageIdx]?.url} alt="" className="w-full h-48 object-cover" />
             <button type="button" onClick={() => setLightboxIdx(imageIdx)}
               className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-white text-[10px] font-medium hover:bg-black/70 transition-colors z-10">
@@ -990,7 +993,7 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
 
         {/* Title + controls */}
         {recipe && (
-          <div className="shrink-0 px-4 pt-4 pb-3 border-b space-y-2.5">
+          <div className="px-4 pt-4 pb-3 border-b space-y-2.5">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-bold leading-tight">{recipe.title}</h2>
@@ -1026,7 +1029,7 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
           </div>
         )}
 
-        <div className="scrollbar-hide overflow-y-auto flex-1 px-4 py-4 space-y-5">
+        <div className="px-4 py-4 space-y-5">
           {isLoading && <div className="flex justify-center py-8"><div className="h-5 w-5 animate-spin rounded-full border-2 border-primary/30 border-t-transparent" /></div>}
           {!recipe && !isLoading && !post.recipeId && <p className="text-sm text-muted-foreground text-center py-4">Recipe no longer available.</p>}
 
@@ -1121,6 +1124,7 @@ function RecipeDetailModal({ post, meId, onClose }: { post: CommunityPost | null
               )}
             </>
           )}
+        </div>
         </div>
 
         {/* Sticky bottom action bar */}
@@ -1250,11 +1254,11 @@ function CreatePostModal({ open, onClose }: { open: boolean; onClose: () => void
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent className={cn(
+      <DialogContent hideClose={step === 'preview'} className={cn(
         'w-[calc(100vw-48px)] mx-auto',
         step === 'preview'
           ? 'max-w-lg p-0 gap-0 overflow-hidden flex flex-col max-h-[85vh]'
-          : 'max-w-lg'
+          : 'max-w-lg max-h-[85vh] overflow-hidden'
       )}>
         {step !== 'preview' && (
           <DialogHeader>
@@ -1297,8 +1301,9 @@ function CreatePostModal({ open, onClose }: { open: boolean; onClose: () => void
             : previewRecipe.image ? [{ url: previewRecipe.image, sortOrder: 0 }] : [];
           return (
           <>
+            <div className="scrollbar-hide overflow-y-auto flex-1">
             {previewImages.length > 0 && (
-              <div className="relative shrink-0 bg-muted">
+              <div className="relative bg-muted">
                 <img src={previewImages[previewImgIdx]?.url} alt={previewRecipe.title} className="w-full h-40 object-cover" />
                 {previewImages.length > 1 && (
                   <>
@@ -1320,7 +1325,7 @@ function CreatePostModal({ open, onClose }: { open: boolean; onClose: () => void
                 )}
               </div>
             )}
-            <div className={cn('scrollbar-hide overflow-y-auto flex-1 px-4 pb-4 space-y-4', previewImages.length === 0 ? 'pt-12' : 'pt-4')}>
+            <div className={cn('px-4 pb-4 space-y-4', previewImages.length === 0 ? 'pt-12' : 'pt-4')}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <h2 className="text-base font-bold leading-tight">{previewDetail?.title ?? previewRecipe.title}</h2>
@@ -1389,6 +1394,7 @@ function CreatePostModal({ open, onClose }: { open: boolean; onClose: () => void
                   )}
                 </>
               )}
+            </div>
             </div>
             <div className="shrink-0 border-t bg-background px-3 py-2.5 flex gap-2">
               <Button variant="outline" size="sm" className="flex-1 h-8 text-xs" onClick={() => setStep('recipe')}>Back</Button>
