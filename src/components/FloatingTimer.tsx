@@ -124,10 +124,9 @@ export function FloatingTimer() {
   return (
     <div
       ref={timerRef}
-      style={pos ? { left: pos.left, top: pos.top } : undefined}
+      style={pos ? { left: pos.left, top: pos.top } : { top: 'max(0.75rem, env(safe-area-inset-top))', right: '0.75rem' }}
       className={cn(
         'fixed z-40 flex items-center gap-1 select-none',
-        pos ? '' : 'top-3 right-3',
         isDragging && 'opacity-90',
       )}
       onMouseDown={handlePointerDown}

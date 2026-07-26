@@ -1888,6 +1888,7 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
               {!isCooking && (
                 <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
                   <span className="flex items-center gap-1"><PantryIcon status="in-stock" />In stock</span>
+                  <span className="flex items-center gap-1"><PantryIcon status="low-stock" />Low stock</span>
                   <span className="flex items-center gap-1"><PantryIcon status="missing" />Out of stock</span>
                 </div>
               )}
@@ -2198,7 +2199,8 @@ function RecipeDetailModal({ recipeId, open, onClose, onEdit, onDelete }: {
           <div className="fixed inset-0 z-[200] bg-background/95 backdrop-blur-sm flex items-center justify-center">
             <button type="button"
               onClick={() => setLightboxIdx(null)}
-              className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
+              className="absolute right-4 flex h-10 w-10 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10"
+              style={{ top: 'max(1rem, env(safe-area-inset-top))' }}>
               <X className="h-5 w-5" />
             </button>
             {images.length > 1 && (
@@ -2450,7 +2452,8 @@ function CategoryPanel({ open, onClose, categories }: {
         'fixed right-0 top-0 z-50 h-full w-full max-w-sm bg-background border-l shadow-2xl flex flex-col transition-transform duration-300 ease-out',
         open ? 'translate-x-0' : 'translate-x-full',
       )}>
-        <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b">
+        <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b"
+          style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
           <div className="flex items-center gap-2">
             <Tag className="h-4 w-4 text-primary" />
             <h2 className="font-semibold text-sm">Manage Categories</h2>

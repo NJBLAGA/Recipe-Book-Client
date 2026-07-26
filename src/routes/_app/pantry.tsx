@@ -93,7 +93,8 @@ function CategoryPanel({ open, onClose, categories }: {
     <div className="fixed inset-0 z-50 flex">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative ml-auto h-full w-80 max-w-[90vw] bg-card shadow-xl flex flex-col animate-in slide-in-from-right duration-200">
-        <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
+        <div className="flex items-center justify-between px-4 py-3 border-b shrink-0"
+          style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
           <div className="flex items-center gap-2">
             <Tag className="h-4 w-4 text-primary" />
             <h2 className="font-semibold text-sm">Pantry Categories</h2>
@@ -718,7 +719,8 @@ function ItemDetailModal({ item, open, onClose, onEdit }: {
             onClick={() => setLightboxIdx(null)}>
             <button type="button"
               onClick={(e) => { e.stopPropagation(); setLightboxIdx(null); }}
-              className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
+              className="absolute right-4 flex h-10 w-10 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10"
+              style={{ top: 'max(1rem, env(safe-area-inset-top))' }}>
               <X className="h-5 w-5" />
             </button>
             <img
@@ -1323,6 +1325,7 @@ function PantryPage() {
         {/* Legend */}
         <div className="flex items-center gap-4 mb-4 text-[11px] text-muted-foreground">
           <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500" />In stock</span>
+          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" />Low stock</span>
           <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-rose-500" />Out of stock</span>
           <span className="ml-auto text-[10px]">{filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''}</span>
         </div>

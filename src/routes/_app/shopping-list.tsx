@@ -91,7 +91,8 @@ function CategoryPanel({ open, onClose, categories }: {
     <div className="fixed inset-0 z-50 flex">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative ml-auto h-full w-80 max-w-[90vw] bg-card shadow-xl flex flex-col animate-in slide-in-from-right duration-200">
-        <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
+        <div className="flex items-center justify-between px-4 py-3 border-b shrink-0"
+          style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
           <div className="flex items-center gap-2">
             <Tag className="h-4 w-4 text-primary" />
             <h2 className="font-semibold text-sm">Shopping Categories</h2>
@@ -1037,7 +1038,8 @@ function ShoppingListPage() {
               onClick={() => setLightboxIdx(null)}>
               <button type="button"
                 onClick={(e) => { e.stopPropagation(); setLightboxIdx(null); }}
-                className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
+                className="absolute right-4 flex h-10 w-10 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10"
+                style={{ top: 'max(1rem, env(safe-area-inset-top))' }}>
                 <X className="h-5 w-5" />
               </button>
               <img src={viewItem.images[lightboxIdx].url} alt=""
@@ -1252,7 +1254,8 @@ function ShoppingListPage() {
               onClick={() => setEditLbIdx(null)}>
               <button type="button"
                 onClick={(e) => { e.stopPropagation(); setEditLbIdx(null); }}
-                className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10">
+                className="absolute right-4 flex h-10 w-10 items-center justify-center rounded-full bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors z-10"
+                style={{ top: 'max(1rem, env(safe-area-inset-top))' }}>
                 <X className="h-5 w-5" />
               </button>
               <img src={editImages[editLbIdx].url} alt=""
