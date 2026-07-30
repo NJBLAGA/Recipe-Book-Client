@@ -699,13 +699,13 @@ function SettingsTab({ me, household }: {
               Have a question or need help? We'd love to hear from you.
             </p>
             <a
-              href="https://mail.google.com/mail/?view=cm&fs=1&to=hello@thesharedpantryexperience.com&su=Enquiry%20-"
+              href="https://mail.google.com/mail/?view=cm&fs=1&to=admin@thesharedpantryexperience.com&su=Enquiry%20-"
               target="_blank"
               rel="noopener noreferrer"
               className="mt-3 inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border text-xs font-medium hover:bg-accent transition-colors"
             >
               <Mail className="h-3.5 w-3.5" />
-              hello@thesharedpantryexperience.com
+              admin@thesharedpantryexperience.com
             </a>
           </div>
         </div>
