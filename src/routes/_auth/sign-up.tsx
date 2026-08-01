@@ -26,6 +26,11 @@ const schema = z
   .object({
     firstName: z.string().min(1, 'First name is required').max(50),
     lastName: z.string().min(1, 'Last name is required').max(50),
+    handle: z
+      .string()
+      .min(2, 'Handle must be at least 2 characters')
+      .max(40, 'Handle must be 40 characters or less')
+      .regex(/^[a-zA-Z0-9_]+$/, 'Letters, numbers, and underscores only'),
     email: z.string().email('Enter a valid email'),
     password: z.string().min(8, 'Password must be at least 8 characters'),
     confirmPassword: z.string(),
@@ -43,7 +48,7 @@ function SignUpPage() {
 
   const form = useForm<FormValues>({
     resolver: standardSchemaResolver(schema),
-    defaultValues: { firstName: '', lastName: '', email: '', password: '', confirmPassword: '' },
+    defaultValues: { firstName: '', lastName: '', handle: '', email: '', password: '', confirmPassword: '' },
   });
 
   const { isSubmitting } = form.formState;
@@ -57,6 +62,7 @@ function SignUpPage() {
       // @ts-expect-error additional fields accepted by the backend additionalFields config
       firstName: values.firstName.trim(),
       lastName: values.lastName.trim(),
+      handle: values.handle.trim(),
     });
 
     if (error) {
@@ -124,6 +130,29 @@ function SignUpPage() {
               )}
             />
           </div>
+
+          <FormField
+            control={form.control}
+            name="handle"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Username</FormLabel>
+                <FormControl>
+                  <div className="relative">
+                    <span className="text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2 text-sm select-none">@</span>
+                    <Input
+                      type="text"
+                      placeholder="janesmith"
+                      autoComplete="off"
+                      className="pl-7"
+                      {...field}
+                    />
+                  </div>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
           <FormField
             control={form.control}

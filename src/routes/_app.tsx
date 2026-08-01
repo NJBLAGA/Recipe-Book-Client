@@ -72,7 +72,7 @@ function TimerDialog() {
 function AppLayout() {
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const { household, isLoading: householdLoading } = useHousehold(!sessionPending && !!session);
-  const { data: me } = useMe();
+  const { data: me, isPending: meLoading } = useMe();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isTopNav = useIsIOSSafariBrowser();
@@ -99,10 +99,16 @@ function AppLayout() {
   }, [session, sessionPending, navigate]);
 
   useEffect(() => {
-    if (!sessionPending && session && !householdLoading && household === null && !householdSkipped) {
+    if (!sessionPending && session && !meLoading && me && !me.handle) {
+      void navigate({ to: '/complete-profile' });
+    }
+  }, [session, sessionPending, me, meLoading, navigate]);
+
+  useEffect(() => {
+    if (!sessionPending && session && !meLoading && me?.handle && !householdLoading && household === null && !householdSkipped) {
       void navigate({ to: '/onboarding' });
     }
-  }, [session, sessionPending, household, householdLoading, householdSkipped, navigate]);
+  }, [session, sessionPending, me, meLoading, household, householdLoading, householdSkipped, navigate]);
 
   // Waiting users can only access /profile — redirect everything else there
   useEffect(() => {
@@ -111,7 +117,7 @@ function AppLayout() {
     }
   }, [householdSkipped, pathname, navigate]);
 
-  if (sessionPending || !session || householdLoading || (household === null && !householdSkipped)) {
+  if (sessionPending || !session || meLoading || householdLoading || (household === null && !householdSkipped)) {
     return <Spinner />;
   }
 

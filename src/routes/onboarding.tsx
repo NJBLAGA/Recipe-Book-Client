@@ -10,6 +10,7 @@ import { authClient } from '@/lib/auth';
 import { api, ApiError } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
 import { useHousehold } from '@/hooks/useHousehold';
+import { useMe } from '@/hooks/useMe';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -69,6 +70,7 @@ const OPTIONS: { id: Panel; icon: React.ElementType; label: string }[] = [
 
 function OnboardingPage() {
   const { data: session, isPending: sessionPending } = authClient.useSession();
+  const { data: me, isPending: meLoading } = useMe();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { household, isLoading: householdLoading } = useHousehold(!sessionPending && !!session);
@@ -149,10 +151,16 @@ function OnboardingPage() {
   });
 
   useEffect(() => {
-    if (!sessionPending && !householdLoading && !session) {
+    if (!sessionPending && !session) {
       void navigate({ to: '/sign-in' });
     }
-  }, [sessionPending, householdLoading, session, navigate]);
+  }, [sessionPending, session, navigate]);
+
+  useEffect(() => {
+    if (!sessionPending && session && !meLoading && me && !me.handle) {
+      void navigate({ to: '/complete-profile' });
+    }
+  }, [sessionPending, session, me, meLoading, navigate]);
 
   useEffect(() => {
     if (!sessionPending && !householdLoading && household !== null) {
@@ -160,7 +168,7 @@ function OnboardingPage() {
     }
   }, [sessionPending, householdLoading, household, navigate]);
 
-  if (sessionPending || householdLoading || !session || household !== null) {
+  if (sessionPending || meLoading || householdLoading || !session || household !== null) {
     return (
       <div className="flex min-h-svh items-center justify-center">
         <div className="border-primary/30 h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" />
